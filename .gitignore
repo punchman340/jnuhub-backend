@@ -1,0 +1,84 @@
+.gradle
+build/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### Windows OS ###
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+.idea_modules/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+*.code-workspace
+
+### 민감 정보 ###
+application-local.yml
+application-local.yaml
+application-secret.yml
+application-secret.yaml
+application-prod.yml
+application-prod.yaml
+.env
+.env.*
+*.env
+secrets/
+
+### Java ###
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+
+### docker ###
+docker-compose.override.yml
+.docker/
+
+### log ###
+logs/
+*.log
+*.log.*
+spring.log
+
+### test report ###
+test-results/
+test-output/
+reports/
+
+### Cache ###
+.gradle-cache/
+.m2/

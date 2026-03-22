@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: jnuhub-postgres
+    environment:
+      POSTGRES_DB: jnuhub
+      POSTGRES_USER: jnuhub_user
+      POSTGRES_PASSWORD: jnuhub1234
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: jnuhub-mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
