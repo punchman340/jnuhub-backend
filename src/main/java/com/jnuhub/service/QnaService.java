@@ -24,7 +24,7 @@ public class QnaService {
     }
 
     // 질문/답변 내용에 키워드 포함된 FAQ 검색
-    // ***아직 gemini api 추가 안 함. 나중에 추가 예정***
+    // *** 아직 gemini api 추가 안 함. 나중에 추가 예정 ***
     public List<FaqDocument> searchFaq(String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return getAllFaq();  // 키워드 없으면 전체 반환

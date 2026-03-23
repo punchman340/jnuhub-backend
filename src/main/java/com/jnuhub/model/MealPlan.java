@@ -54,4 +54,8 @@ public class MealPlan {
         this.subType    = subType;
         this.menuItems  = menuItems != null ? menuItems : new ArrayList<>();
     }
+    public void updateMenuItems(List<String> menuItems) {
+        this.menuItems.clear();
+        this.menuItems.addAll(menuItems);
+    }
 }

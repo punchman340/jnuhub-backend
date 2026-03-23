@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface MealPlanRepository extends JpaRepository<MealPlan, Long> {
     // 특정 식단/날짜 전체 식단 조회
@@ -19,6 +20,9 @@ public interface MealPlanRepository extends JpaRepository<MealPlan, Long> {
     boolean existsByRestaurantIdAndMealDateAndMealTypeAndSubType(
             Long restaurantId, LocalDate mealDate,
             String mealType, String subType);
+    // Upsert 시 기존 엔티티로 가져와서 updateMenuItems() 호출
+    Optional<MealPlan> findByRestaurantIdAndMealDateAndMealTypeAndSubType(
+            Long restaurantId, LocalDate mealDate, String mealType, String subType);
     //주간 식단 일괄 조회
     @Query("""
             SELECT m FROM MealPlan m
