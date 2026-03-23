@@ -14,4 +14,7 @@ public interface CrawlMetaRepository extends JpaRepository<CrawlMeta, Long> {
     // 실패/미완료 상태인 재시도 대상 조회
     List<CrawlMeta> findByTargetDateAndStatusNot(
             LocalDate targetDate, String status);
+    // 이번주 신선도 데이터 조회
+    List<CrawlMeta> findByRestaurantIdAndTargetDateBetween(
+            Long restaurantId, LocalDate start, LocalDate end);
 }
