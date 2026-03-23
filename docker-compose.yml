@@ -17,7 +17,7 @@ services:
     container_name: jnuhub-mosquitto
     ports:
       - "1883:1883"
-      - "9001:9001"
+      #- "9001:9001"
     volumes:
       - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
     restart: unless-stopped

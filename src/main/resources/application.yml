@@ -1,11 +1,14 @@
 spring:
   datasource:
+    url: jdbc:postgresql://localhost:5432/jnuhub
+    username: jnuhub_user
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      ddl-auto: validate
-    show-sql: false               # 공통 기본값 false (local에서 true로 override)
+      ddl-auto: update
+    show-sql: false
     properties:
       hibernate:
         format_sql: true

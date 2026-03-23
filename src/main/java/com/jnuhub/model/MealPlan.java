@@ -6,7 +6,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Type;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -39,8 +40,8 @@ public class MealPlan {
     @Column(length = 20)
     private String subType;     // KOREAN | SPECIAL | TYPE_A | TYPE_B
 
-    @Type(ListArrayType.class)
-    @Column(columnDefinition = "text[]", nullable = false)
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(nullable = false)
     private List<String> menuItems = new ArrayList<>();
 
     // 신선도는 CrawlMeta 가 관리 → crawledAt 없음

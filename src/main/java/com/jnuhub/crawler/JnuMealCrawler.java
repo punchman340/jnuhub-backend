@@ -93,7 +93,6 @@ public class JnuMealCrawler {
     // ════════════════════════════════════════════════════════════
     //  진입점
     // ════════════════════════════════════════════════════════════
-    @Transactional
     public void crawlAll() {
         crawlTodayJnu();
         crawlDormitory();
