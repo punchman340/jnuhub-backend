@@ -58,9 +58,8 @@ public class MealService {
                 .stream()
                 .collect(Collectors.toMap(
                         CrawlMeta::getTargetDate,
-                        meta -> meta.getLastSucceededAt() != null
-                                ? meta.getLastSucceededAt()
-                                : LocalDateTime.MIN  // 최솟값으로 수집 없음 표현 + null 방지
+                        meta -> meta.getLastSucceededAt(), // null 허용
+                        (existing, replacement) -> existing // 중복 시 기존값 사용
                 ));
 
 

@@ -56,8 +56,8 @@ public class CrawlMeta {
     // 크롤링 재시도 후 결과 업데이트
     public void updateResult(String status, String errorMessage) {
         this.lastAttemptedAt = LocalDateTime.now();
-        this.status          = status;
-        this.errorMessage    = errorMessage;
+        this.status = status;
+        this.errorMessage = errorMessage;
         if ("SUCCESS".equals(status)) {
             this.lastSucceededAt = LocalDateTime.now();
         }

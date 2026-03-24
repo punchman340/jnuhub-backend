@@ -110,37 +110,40 @@ public class JnuMealCrawler {
 
         int year = LocalDate.now().getYear();
 
-        for (Element h5 : doc.select("h5")) {
-            String restaurantHeader = h5.text();
-            Element sibling         = h5.nextElementSibling();
-            String  currentSection  = null;
+        // div.cont-b 단위로 루프 (식당 단위)
+        for (Element contB : doc.select("div.cont-b")) {
+            Element h5 = contB.selectFirst("h5");
+            if (h5 == null) continue;
 
-            while (sibling != null && !sibling.tagName().equals("h5")) {
-                String sibText = sibling.text();
+            // "용봉 - 제1학생마루식당 : 062-..." -> "제1학생마루" 추출
+            String restaurantHeader = h5.text().trim();
 
-                if (isMealSectionHeader(sibText)
-                        && !sibling.tagName().equals("table")) {
-                    currentSection = sibText;
-                }
+            // 식당 안의 각 끼니별 컨테이너 루프
+            for (Element menuContainer : contB.select("div.menu-container")) {
+                // 운영 안 함(N) 스킵
+                if ("N".equals(menuContainer.attr("data-isoperating"))) continue;
 
-                Element table = sibling.selectFirst("table");
-                // 수정
-                if (table != null && currentSection != null) {
-                    SectionMapping mapping = resolveToday(restaurantHeader, currentSection);
-                    if (mapping != null) {
-                        Restaurant restaurant = findRestaurant(mapping.restaurantName());
-                        if (restaurant != null) {
-                            try {
-                                parseTodayTable(table, restaurant, mapping, year);
-                            } catch (Exception e) {
-                                log.error("[크롤러] {} 파싱 실패: {}", restaurant.getName(), e.getMessage());
-                                saveFailMeta(restaurant, LocalDate.now());
-                            }
-                        }
+                Element pTag = menuContainer.selectFirst("p");
+                if (pTag == null) continue;
+                String sectionText = pTag.text().trim(); // "조식-한식 : 1,000원..."
+
+                // 매핑 정보 찾기
+                SectionMapping mapping = resolveToday(restaurantHeader, sectionText);
+                if (mapping == null) continue;
+
+                Restaurant restaurant = findRestaurant(mapping.restaurantName());
+                if (restaurant == null) continue;
+
+                // 테이블 파싱 (여기서 날짜별로 여러 행이 나옴)
+                Element table = menuContainer.selectFirst("table.type1");
+                if (table != null) {
+                    try {
+                        parseTodayTable(table, restaurant, mapping, year);
+                        log.info("[크롤러] 성공: {} - {}", restaurant.getName(), mapping.mealKeyword());
+                    } catch (Exception e) {
+                        log.error("[크롤러] {} 파싱 에러: {}", restaurant.getName(), e.getMessage());
                     }
                 }
-
-                sibling = sibling.nextElementSibling();
             }
         }
     }
@@ -322,12 +325,15 @@ public class JnuMealCrawler {
 
     private SectionMapping resolveToday(String restaurantHeader, String sectionText) {
         for (SectionMapping m : TODAY_MAPPINGS) {
-            if (restaurantHeader.contains(m.restaurantKeyword())
-                    && sectionText.contains(m.mealKeyword())) {
-                return m;
+            // 식당 이름 포함 여부 확인
+            if (restaurantHeader.contains(m.restaurantKeyword())) {
+                // 섹션 텍스트(p태그)에서 끼니 키워드 확인
+                // 예: "중식-간편식(To Go)"에 "일품" 혹은 "중식"이 있는지 확인
+                if (sectionText.contains(m.mealKeyword())) {
+                    return m;
+                }
             }
         }
-        log.debug("[크롤러] today 매핑 실패 - 식당:'{}' 섹션:'{}'", restaurantHeader, sectionText);
         return null;
     }
 
@@ -359,12 +365,11 @@ public class JnuMealCrawler {
 
     private LocalDate parseTodayDate(String dateStr, int baseYear) {
         try {
-            String mmdd = dateStr.split("\\s")[0]; // "03-23"
+            String mmdd = dateStr.trim().substring(0,5); // "03-23"
             int month = Integer.parseInt(mmdd.split("-")[0]);
             int year = (LocalDate.now().getMonthValue() == 12 && month == 1)
                     ? baseYear + 1
                     : baseYear;
-            if (LocalDate.now().getMonthValue() == 12 && month == 1) year++;
             return LocalDate.parse(year + "-" + mmdd, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         } catch (Exception e) {
             log.warn("[크롤러] 날짜 파싱 실패: '{}'", dateStr);
@@ -377,13 +382,14 @@ public class JnuMealCrawler {
      * 생활관은 쉼표 대신 공백/줄바꿈 구분이므로 쉼표 우선, 없으면 그대로 단일 항목
      */
     private List<String> splitMenuItems(String content) {
-        if (content.contains(",")) {
-            return Arrays.stream(content.split(","))
-                    .map(String::trim)
-                    .filter(s -> !s.isBlank())
-                    .toList();
-        }
-        return List.of(content.trim());
+        if (content == null || content.isBlank()) return Collections.emptyList();
+
+        // 쉼표로 먼저 나누고, 각 항목의 앞뒤 공백 제거
+        String delimiter = content.contains(",") ? "," : "\\s+";
+        return Arrays.stream(content.split(delimiter))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
     }
 
     private boolean isMealSectionHeader(String text) {
