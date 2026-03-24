@@ -111,39 +111,43 @@ public class JnuMealCrawler {
         int year = LocalDate.now().getYear();
 
         // div.cont-b 단위로 루프 (식당 단위)
-        for (Element contB : doc.select("div.cont-b")) {
-            Element h5 = contB.selectFirst("h5");
-            if (h5 == null) continue;
+        Elements h5List = doc.select("h5"); // 식당 헤더들
+        if (h5List.isEmpty()) {
+            log.warn("[크롤러] h5 태그를 찾지 못했습니다. HTML 구조 변경 가능성 있음.");
+            return;
+        }
 
-            // "용봉 - 제1학생마루식당 : 062-..." -> "제1학생마루" 추출
+        for (Element h5 : h5List) {
             String restaurantHeader = h5.text().trim();
+            // h5 다음 형제 요소들을 순서대로 순회 (p, table, p, table ...)
+            // 다음 h5가 나오면 중단
+            Element sibling = h5.nextElementSibling();
+            String currentSectionText = null;
 
-            // 식당 안의 각 끼니별 컨테이너 루프
-            for (Element menuContainer : contB.select("div.menu-container")) {
-                // 운영 안 함(N) 스킵
-                if ("N".equals(menuContainer.attr("data-isoperating"))) continue;
+            while (sibling != null && !sibling.tagName().equals("h5")) {
+                String tag = sibling.tagName();
 
-                Element pTag = menuContainer.selectFirst("p");
-                if (pTag == null) continue;
-                String sectionText = pTag.text().trim(); // "조식-한식 : 1,000원..."
+                if (tag.equals("p")) {
+                    // 끼니 헤더 텍스트 저장
+                    currentSectionText = sibling.text().trim();
 
-                // 매핑 정보 찾기
-                SectionMapping mapping = resolveToday(restaurantHeader, sectionText);
-                if (mapping == null) continue;
-
-                Restaurant restaurant = findRestaurant(mapping.restaurantName());
-                if (restaurant == null) continue;
-
-                // 테이블 파싱 (여기서 날짜별로 여러 행이 나옴)
-                Element table = menuContainer.selectFirst("table.type1");
-                if (table != null) {
-                    try {
-                        parseTodayTable(table, restaurant, mapping, year);
-                        log.info("[크롤러] 성공: {} - {}", restaurant.getName(), mapping.mealKeyword());
-                    } catch (Exception e) {
-                        log.error("[크롤러] {} 파싱 에러: {}", restaurant.getName(), e.getMessage());
+                } else if (tag.equals("table") && currentSectionText != null) {
+                    // 매핑 찾기
+                    SectionMapping mapping = resolveToday(restaurantHeader, currentSectionText);
+                    if (mapping != null) {
+                        Restaurant restaurant = findRestaurant(mapping.restaurantName());
+                        if (restaurant != null) {
+                            try {
+                                parseTodayTable(sibling, restaurant, mapping, year);
+                                log.info("[크롤러] 성공: {} - {}", restaurant.getName(), currentSectionText);
+                            } catch (Exception e) {
+                                log.error("[크롤러] {} 파싱 에러: {}", restaurant.getName(), e.getMessage());
+                            }
+                        }
                     }
                 }
+
+                sibling = sibling.nextElementSibling();
             }
         }
     }
@@ -382,13 +386,19 @@ public class JnuMealCrawler {
      * 생활관은 쉼표 대신 공백/줄바꿈 구분이므로 쉼표 우선, 없으면 그대로 단일 항목
      */
     private List<String> splitMenuItems(String content) {
-        if (content == null || content.isBlank()) return Collections.emptyList();
+        if (content == null || content.isBlank() || content.contains("존재하지 않습니다")) {
+            return Collections.emptyList();
+        }
 
-        // 쉼표로 먼저 나누고, 각 항목의 앞뒤 공백 제거
-        String delimiter = content.contains(",") ? "," : "\\s+";
-        return Arrays.stream(content.split(delimiter))
+
+        String cleaned = content.replace("\u00a0", " ").replaceAll("\\s+", " ").trim();
+        if (cleaned.isEmpty()) return Collections.emptyList();
+
+        String delimiter = cleaned.contains(",") ? "," : "\\s+";
+
+        return Arrays.stream(cleaned.split(delimiter))
                 .map(String::trim)
-                .filter(s -> !s.isEmpty())
+                .filter(s -> !s.isEmpty() && s.length() > 1) // 1글자짜리 오타나 찌꺼기 제외
                 .toList();
     }
 

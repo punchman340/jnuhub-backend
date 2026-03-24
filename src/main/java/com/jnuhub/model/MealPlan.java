@@ -1,6 +1,5 @@
 package com.jnuhub.model;
 
-import io.hypersistence.utils.hibernate.type.array.ListArrayType;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -10,7 +9,8 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 @Entity
@@ -35,16 +35,15 @@ public class MealPlan {
     private LocalDate mealDate;
 
     @Column(nullable = false, length = 20)
-    private String mealType;    // BREAKFAST | LUNCH | DINNER
+    private String mealType;
 
     @Column(length = 20)
-    private String subType;     // KOREAN | SPECIAL | TYPE_A | TYPE_B
+    private String subType;
 
+    // 🚨 핵심 수정: List 대신 String[] 사용
     @JdbcTypeCode(SqlTypes.ARRAY)
-    @Column(nullable = false)
-    private List<String> menuItems = new ArrayList<>();
-
-    // 신선도는 CrawlMeta 가 관리 → crawledAt 없음
+    @Column(columnDefinition = "text[]", nullable = false)
+    private String[] menuItems = new String[0];
 
     @Builder
     public MealPlan(Restaurant restaurant, LocalDate mealDate,
@@ -53,9 +52,17 @@ public class MealPlan {
         this.mealDate   = mealDate;
         this.mealType   = mealType;
         this.subType    = subType;
-        this.menuItems  = menuItems != null ? menuItems : new ArrayList<>();
+        updateMenuItems(menuItems);
     }
+
     public void updateMenuItems(List<String> menuItems) {
-        this.menuItems = new ArrayList<>(menuItems);
+        this.menuItems = (menuItems != null && !menuItems.isEmpty())
+                ? menuItems.toArray(new String[0])
+                : new String[0];
+    }
+
+    // DTO에서 편하게 쓰기 위한 변환 메서드
+    public List<String> getMenuItemsAsList() {
+        return this.menuItems != null ? Arrays.asList(this.menuItems) : Collections.emptyList();
     }
 }

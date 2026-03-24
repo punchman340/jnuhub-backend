@@ -19,14 +19,15 @@ public class MealResponseDto {
     private List<String> menuItems;
 
     // Entity -> DTO 변환
+    // from 메서드 내부 수정 예시
     public static MealResponseDto from(MealPlan mealPlan) {
-        return MealResponseDto.builder()
-                .id(mealPlan.getId())
-                .restaurantName(mealPlan.getRestaurant() != null ? mealPlan.getRestaurant().getName() : "Unknown")
-                .mealDate(mealPlan.getMealDate())
-                .mealType(mealPlan.getMealType())
-                .subType(mealPlan.getSubType())
-                .menuItems(mealPlan.getMenuItems())
-                .build();
+        return new MealResponseDto(
+                mealPlan.getId(),
+                mealPlan.getRestaurant().getName(),
+                mealPlan.getMealDate(),
+                mealPlan.getMealType(),
+                mealPlan.getSubType(),
+                mealPlan.getMenuItemsAsList()
+        );
     }
 }
