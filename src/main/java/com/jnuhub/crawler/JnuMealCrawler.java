@@ -15,7 +15,8 @@ import org.jsoup.select.Elements;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
+import javax.net.ssl.*;
+import java.security.cert.X509Certificate;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -93,11 +94,10 @@ public class JnuMealCrawler {
     // ════════════════════════════════════════════════════════════
     //  진입점
     // ════════════════════════════════════════════════════════════
-    @Transactional
     public void crawlAll() {
-        crawlTodayJnu();
-        crawlDormitory();
-        crawlYeosuDorm();
+        try { crawlTodayJnu(); } catch (Exception e) { log.error("학식 실패: {}", e.getMessage()); }
+        try { crawlDormitory(); } catch (Exception e) { log.error("광주생활관 실패: {}", e.getMessage()); }
+        try { crawlYeosuDorm(); } catch (Exception e) { log.error("여수생활관 실패: {}", e.getMessage()); }
     }
 
     // ════════════════════════════════════════════════════════════
@@ -220,9 +220,16 @@ public class JnuMealCrawler {
     // ════════════════════════════════════════════════════════════
     private void parseDormTable(Document doc, List<DormRowMapping> mappings) {
         Element targetTable = null;
+        Pattern datePattern = Pattern.compile("\\d{4}\\.\\d{2}\\.\\d{2}");
         for (Element table : doc.select("table")) {
-            Element firstTh = table.selectFirst("th");
-            if (firstTh != null && firstTh.text().trim().equals("구분")) {
+            // 헤더 행의 th 중에 날짜 패턴이 있는 테이블을 찾음
+            Element headerRow = table.selectFirst("tr");
+            if (headerRow == null) continue;
+
+            boolean hasDateHeader = headerRow.select("th, td").stream()
+                    .anyMatch(cell -> datePattern.matcher(cell.text()).find());
+
+            if (hasDateHeader) {
                 targetTable = table;
                 break;
             }
@@ -278,29 +285,46 @@ public class JnuMealCrawler {
 
     private void upsertMealPlan(Restaurant restaurant, LocalDate date,
                                 String mealType, String subType, List<String> menuItems) {
+        // 1. 식단(MealPlan) 저장 또는 업데이트
         mealPlanRepository
                 .findByRestaurantIdAndMealDateAndMealTypeAndSubType(
                         restaurant.getId(), date, mealType, subType)
                 .ifPresentOrElse(
-                        existing -> { existing.updateMenuItems(menuItems); },
-                        () -> mealPlanRepository.save(
-                                MealPlan.builder()
-                                        .restaurant(restaurant)
-                                        .mealDate(date)
-                                        .mealType(mealType)
-                                        .subType(subType)
-                                        .menuItems(menuItems)
-                                        .build()
-                        )
+                        existing -> {
+                            existing.updateMenuItems(menuItems);
+                            mealPlanRepository.save(existing);
+                        },
+                        () -> {
+                            MealPlan newMeal = MealPlan.builder()
+                                    .restaurant(restaurant)
+                                    .mealDate(date)
+                                    .mealType(mealType)
+                                    .subType(subType)
+                                    .menuItems(menuItems)
+                                    .build();
+                            mealPlanRepository.save(newMeal);
+                        }
                 );
+
+        // 2. 메타데이터(CrawlMeta) 저장 또는 업데이트
+        // findBy로 찾은 뒤 있으면 update, 없으면 builder로 새로 생성해서 save
         CrawlMeta meta = crawlMetaRepository
                 .findByRestaurantIdAndTargetDate(restaurant.getId(), date)
-                .orElseGet(() -> CrawlMeta.builder()
-                        .restaurant(restaurant)
-                        .targetDate(date)
-                        .errorMessage(null)
-                        .build());
-        meta.updateResult("SUCCESS", null);
+                .map(existingMeta -> {
+                    existingMeta.updateResult("SUCCESS", null);
+                    return existingMeta;
+                })
+                .orElseGet(() -> {
+                    CrawlMeta newMeta = CrawlMeta.builder()
+                            .restaurant(restaurant)
+                            .targetDate(date)
+                            .status("SUCCESS")
+                            .errorMessage(null)
+                            .build();
+                    newMeta.updateResult("SUCCESS", null); // ← 중복이지만 의도를 명확히
+                    return newMeta;
+                });
+
         crawlMetaRepository.save(meta);
     }
 
@@ -318,12 +342,12 @@ public class JnuMealCrawler {
 
     private Document fetchDocument(String url) {
         try {
-            Document doc = Jsoup.connect(url).timeout(10_000).get();
+            Document doc = getDocumentWithNoSSL(url);
             doc.select("br").append(",");
             return doc;
-        } catch (IOException e) {
-            log.error("[크롤러] 연결 실패 url={} msg={}", url, e.getMessage());
-            return null;
+        } catch (Exception e) {
+            log.error("[크롤러] 연결 실패: {} | 사유: {}", url, e.getMessage());
+            return null; // 여기서 null을 줘도 상위 루프에서 continue로 넘어가게 설계됨
         }
     }
 
@@ -404,5 +428,30 @@ public class JnuMealCrawler {
 
     private boolean isMealSectionHeader(String text) {
         return text.contains("조식") || text.contains("중식") || text.contains("석식");
+    }
+
+    private Document getDocumentWithNoSSL(String url) throws Exception {
+        // 🚨 SSL 인증서 무시 설정 (모든 인증서를 신뢰함)
+        TrustManager[] trustAllCerts = new TrustManager[]{
+                new X509TrustManager() {
+                    public X509Certificate[] getAcceptedIssuers() { return null; }
+                    public void checkClientTrusted(X509Certificate[] certs, String authType) {}
+                    public void checkServerTrusted(X509Certificate[] certs, String authType) {}
+                }
+        };
+
+        SSLContext sc = SSLContext.getInstance("SSL");
+        sc.init(null, trustAllCerts, new java.security.SecureRandom());
+        HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
+
+        // 호스트네임 검증도 무시
+        HostnameVerifier allHostsValid = (hostname, session) -> true;
+        HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
+
+        // 이제 Jsoup으로 연결 (옵션 없이 기본으로 쳐도 위 설정이 적용됨)
+        return Jsoup.connect(url)
+                .timeout(10000)
+                .userAgent("Mozilla/5.0") // 차단 방지용 브라우저 흉내
+                .get();
     }
 }
