@@ -1,5 +1,6 @@
 package com.jnuhub.service;
 
+import com.jnuhub.dto.meal.MealResponseDto;
 import com.jnuhub.model.CrawlMeta;
 import com.jnuhub.model.MealPlan;
 import com.jnuhub.repository.CrawlMetaRepository;
@@ -13,7 +14,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -29,14 +30,19 @@ public class MealService {
                 mealPlanRepository.findByRestaurantIdAndMealDate(restaurantId, date);
 
         // 2. MealType 기준으로 그룹핑
-        Map<String, List<MealPlan>> groupedByMealType = mealPlans.stream()
-                .collect(Collectors.groupingBy(MealPlan::getMealType));
+        Map<String, List<MealResponseDto>> groupedByMealType = mealPlans.stream()
+                .map(MealResponseDto::from)
+                .collect(Collectors.groupingBy(MealResponseDto::getMealType));
 
         // 3. 신선도 조회 (없으면 null → "정보 없음" 처리)
-        Optional<CrawlMeta> crawlMeta =
-                crawlMetaRepository.findByRestaurantIdAndTargetDate(restaurantId, date);
+        LocalDateTime freshness = crawlMetaRepository
+                .findByRestaurantIdAndTargetDate(restaurantId, date)
+                .map(meta -> meta.getLastSucceededAt() != null
+                        ? meta.getLastSucceededAt()
+                        : LocalDateTime.MIN)
+                .orElse(null);
 
-        return new MealDailyResult(groupedByMealType, crawlMeta.orElse(null));
+        return new MealDailyResult(groupedByMealType, freshness);
     }
 
     // 주간 식단 조회
@@ -59,35 +65,40 @@ public class MealService {
 
 
         // 3. 날짜별 그룹핑
-        Map<LocalDate, List<MealPlan>> byDate = mealPlans.stream()
-                .collect(Collectors.groupingBy(MealPlan::getMealDate));
+        // 기본 groupingBy 순서 혼잡 방지 -> treemap 사용해 날짜 정렬
+        // 추가 정렬 방지 -> sorted 삭제
+        Map<LocalDate, List<MealResponseDto>> byDate = mealPlans.stream()
+                .map(MealResponseDto::from)
+                .collect(Collectors.groupingBy(
+                        MealResponseDto::getMealDate,
+                        TreeMap::new,
+                        Collectors.toList()
+                ));
 
-        // 4. 결과 조립 (이제 루프 안에서 DB 안 가고 freshnessMap에서 꺼내 씁니다)
         return byDate.entrySet().stream()
                 .map(entry -> {
                     LocalDate date = entry.getKey();
-                    Map<String, List<MealPlan>> mealsByType = entry.getValue().stream()
-                            .collect(Collectors.groupingBy(MealPlan::getMealType));
 
-                    // 메모리(Map)에서 바로 꺼내기 (DB 쿼리 0번)
+                    Map<String, List<MealResponseDto>> mealsByType = entry.getValue().stream()
+                            .collect(Collectors.groupingBy(MealResponseDto::getMealType));
+
                     LocalDateTime freshness = freshnessMap.get(date);
 
                     return new MealWeeklyResult(date, mealsByType, freshness);
                 })
-                .sorted(Comparator.comparing(MealWeeklyResult::date))
                 .collect(Collectors.toList());
     }
 
     // getDailyMeal() 반환 타입 — 식단 + 신선도 묶음
     // record 사용 → 불변 DTO 역할
     public record MealDailyResult(
-            Map<String, List<MealPlan>> mealsByType,  // MealType → 식단 목록
-            CrawlMeta crawlMeta                        // 신선도 정보 (null 가능)
+            Map<String, List<MealResponseDto>> mealsByType,
+            LocalDateTime freshness   // ✅ CrawlMeta 엔티티 제거 → 시각 정보만
     ) {}
     // 주간 식단용 DTO
     public record MealWeeklyResult(
             LocalDate date,
-            Map<String, List<MealPlan>> mealsByType,
+            Map<String, List<MealResponseDto>> mealsByType,
             LocalDateTime freshness
     ) {}
 }

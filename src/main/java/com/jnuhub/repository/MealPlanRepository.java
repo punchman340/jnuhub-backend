@@ -11,8 +11,10 @@ import java.util.Optional;
 
 public interface MealPlanRepository extends JpaRepository<MealPlan, Long> {
     // 특정 식단/날짜 전체 식단 조회
+    @Query("SELECT m FROM MealPlan m JOIN FETCH m.restaurant " +
+            "WHERE m.restaurant.id = :restaurantId AND m.mealDate = :mealDate")
     List<MealPlan> findByRestaurantIdAndMealDate(
-            Long restaurantId, LocalDate mealDate);
+            @Param("restaurantId") Long restaurantId, @Param("mealDate") LocalDate mealDate);
     // 특정 끼니 필터링 조회
     List<MealPlan> findByRestaurantIdAndMealDateAndMealType(
             Long restaurantId, LocalDate mealDate, String mealType);
@@ -25,9 +27,10 @@ public interface MealPlanRepository extends JpaRepository<MealPlan, Long> {
             Long restaurantId, LocalDate mealDate, String mealType, String subType);
     //주간 식단 일괄 조회
     @Query("""
-            SELECT m FROM MealPlan m
+            SELECT m FROM MealPlan m\s
+            JOIN FETCH m.restaurant
             WHERE m.restaurant.id = :restaurantId
-              AND m.mealDate BETWEEN :from AND :to
+            AND m.mealDate BETWEEN :from AND :to
             ORDER BY m.mealDate, m.mealType, m.subType
             """)
     List<MealPlan> findWeeklyMealPlan(

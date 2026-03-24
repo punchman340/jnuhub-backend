@@ -93,6 +93,7 @@ public class JnuMealCrawler {
     // ════════════════════════════════════════════════════════════
     //  진입점
     // ════════════════════════════════════════════════════════════
+    @Transactional
     public void crawlAll() {
         crawlTodayJnu();
         crawlDormitory();
@@ -157,12 +158,8 @@ public class JnuMealCrawler {
         crawlMetaRepository.save(meta);
     }
 
-
-    /**
-     * today.jnu.ac.kr 3컬럼 테이블 파싱
-     * | 03-23 (월) | 한식 | 돈까스, 김치찌개, ... |
-     * → menuItems: ["돈까스", "김치찌개", ...]  (쉼표 분리)
-     */
+    // today.jnu.ac.kr 3컬럼 테이블 파싱
+    // -> menuItems -> 쉼표로 분리
     private void parseTodayTable(Element table, Restaurant restaurant,
                                  SectionMapping mapping, int year) {
 
@@ -294,7 +291,6 @@ public class JnuMealCrawler {
                 .orElseGet(() -> CrawlMeta.builder()
                         .restaurant(restaurant)
                         .targetDate(date)
-                        .status("SUCCESS")
                         .errorMessage(null)
                         .build());
         meta.updateResult("SUCCESS", null);
@@ -361,10 +357,13 @@ public class JnuMealCrawler {
         return dates;
     }
 
-    private LocalDate parseTodayDate(String dateStr, int year) {
+    private LocalDate parseTodayDate(String dateStr, int baseYear) {
         try {
             String mmdd = dateStr.split("\\s")[0]; // "03-23"
             int month = Integer.parseInt(mmdd.split("-")[0]);
+            int year = (LocalDate.now().getMonthValue() == 12 && month == 1)
+                    ? baseYear + 1
+                    : baseYear;
             if (LocalDate.now().getMonthValue() == 12 && month == 1) year++;
             return LocalDate.parse(year + "-" + mmdd, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         } catch (Exception e) {

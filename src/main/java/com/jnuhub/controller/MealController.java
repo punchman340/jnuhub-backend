@@ -1,5 +1,6 @@
 package com.jnuhub.controller;
 
+import com.jnuhub.dto.common.ApiResponse;
 import com.jnuhub.service.MealService;
 import com.jnuhub.service.MealService.MealDailyResult;
 import com.jnuhub.service.MealService.MealWeeklyResult;
@@ -15,24 +16,27 @@ import java.util.List;
 @RequestMapping("/api/meals")
 @RequiredArgsConstructor
 public class MealController {
+
     private final MealService mealService;
 
-    // GET /api/meals/daily?restaurantId=i&date=yyyy-mm-dd
+    // GET /api/meals/daily?restaurantId=1&date=2026-03-24
     @GetMapping("/daily")
-    public ResponseEntity<MealDailyResult> getDailyMeal(
+    public ResponseEntity<ApiResponse<MealDailyResult>> getDailyMeal(
             @RequestParam Long restaurantId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ) {
-        return ResponseEntity.ok(mealService.getDailyMeal(restaurantId, date));
+        MealDailyResult result = mealService.getDailyMeal(restaurantId, date);
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
-    // GET /api/meals/weekly?restaurantId=i&from=yyyy-mm-dd&to=yyyy-mm-dd
+    // GET /api/meals/weekly?restaurantId=1&from=2026-03-24&to=2026-03-28
     @GetMapping("/weekly")
-    public ResponseEntity<List<MealWeeklyResult>> getWeeklyMeal(
+    public ResponseEntity<ApiResponse<List<MealWeeklyResult>>> getWeeklyMeal(
             @RequestParam Long restaurantId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
-        return ResponseEntity.ok(mealService.getWeeklyMeal(restaurantId, from, to));
+        List<MealWeeklyResult> result = mealService.getWeeklyMeal(restaurantId, from, to);
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 }
