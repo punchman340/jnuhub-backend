@@ -60,13 +60,13 @@ public class JnuMealCrawler {
             new SectionMapping("햇들마루",    "중식",  "햇들마루",    "LUNCH",     null),
             new SectionMapping("햇들마루",    "석식",  "햇들마루",    "DINNER",    null),
             new SectionMapping("제2학생마루", "중식",  "제2학생마루", "LUNCH",     null),
-            new SectionMapping("명학회관",    "중식",  "학동-명학회관",    "LUNCH",     null),
-            new SectionMapping("학생회관",    "조식",  "여수-학생회관","BREAKFAST", null),
-            new SectionMapping("학생회관",    "중식",  "여수-학생회관","LUNCH",     null),
-            new SectionMapping("학생회관",    "석식",  "여수-학생회관","DINNER",    null),
-            new SectionMapping("여미샘",      "조식",  "화순-여미샘",      "BREAKFAST", null),
-            new SectionMapping("여미샘",      "중식",  "화순-여미샘",      "LUNCH",     null),
-            new SectionMapping("여미샘",      "석식",  "화순-여미샘",      "DINNER",    null)
+            new SectionMapping("명학회관",    "중식",  "학동-명학회관", "LUNCH",     null),
+            new SectionMapping("학생회관",    "조식",  "여수-학생회관", "BREAKFAST", null),
+            new SectionMapping("학생회관",    "중식",  "여수-학생회관", "LUNCH",     null),
+            new SectionMapping("학생회관",    "석식",  "여수-학생회관", "DINNER",    null),
+            new SectionMapping("여미샘",      "조식",  "화순-여미샘",   "BREAKFAST", null),
+            new SectionMapping("여미샘",      "중식",  "화순-여미샘",   "LUNCH",     null),
+            new SectionMapping("여미샘",      "석식",  "화순-여미샘",   "DINNER",    null)
     );
 
     // ── 생활관 행 매핑 레코드 ─────────────────────────────────
@@ -105,49 +105,44 @@ public class JnuMealCrawler {
     // ════════════════════════════════════════════════════════════
     @Transactional
     public void crawlTodayJnu() {
+        log.info("🚀 [학식] 크롤링 시작: {}", TODAY_URL);
         Document doc = fetchDocument(TODAY_URL);
         if (doc == null) return;
 
         int year = LocalDate.now().getYear();
 
-        // div.cont-b 단위로 루프 (식당 단위)
-        Elements h5List = doc.select("h5"); // 식당 헤더들
-        if (h5List.isEmpty()) {
-            log.warn("[크롤러] h5 태그를 찾지 못했습니다. HTML 구조 변경 가능성 있음.");
-            return;
-        }
+        // 1. 모든 식당 블록(cont-b)을 찾습니다.
+        Elements restaurantBlocks = doc.select("div.cont-b");
 
-        for (Element h5 : h5List) {
+        for (Element block : restaurantBlocks) {
+            // 2. 식당 이름 추출 (예: 용봉 - 제1학생마루식당)
+            Element h5 = block.selectFirst("h5");
+            if (h5 == null) continue;
             String restaurantHeader = h5.text().trim();
-            // h5 다음 형제 요소들을 순서대로 순회 (p, table, p, table ...)
-            // 다음 h5가 나오면 중단
-            Element sibling = h5.nextElementSibling();
-            String currentSectionText = null;
 
-            while (sibling != null && !sibling.tagName().equals("h5")) {
-                String tag = sibling.tagName();
+            // 3. 해당 식당 블록 내의 모든 메뉴 컨테이너(menu-container) 순회
+            Elements menuContainers = block.select("div.menu-container");
+            for (Element container : menuContainers) {
+                // 끼니 정보 추출 (p 태그: 예: 조식-한식 : 1,000원)
+                Element pTag = container.selectFirst("p");
+                if (pTag == null) continue;
+                String sectionText = pTag.text().trim();
 
-                if (tag.equals("p")) {
-                    // 끼니 헤더 텍스트 저장
-                    currentSectionText = sibling.text().trim();
+                // 매핑 정보 확인 (제1학생마루, 중식 등 키워드 매칭)
+                SectionMapping mapping = resolveToday(restaurantHeader, sectionText);
+                if (mapping != null) {
+                    Restaurant restaurant = findRestaurant(mapping.restaurantName());
+                    Element table = container.selectFirst("table");
 
-                } else if (tag.equals("table") && currentSectionText != null) {
-                    // 매핑 찾기
-                    SectionMapping mapping = resolveToday(restaurantHeader, currentSectionText);
-                    if (mapping != null) {
-                        Restaurant restaurant = findRestaurant(mapping.restaurantName());
-                        if (restaurant != null) {
-                            try {
-                                parseTodayTable(sibling, restaurant, mapping, year);
-                                log.info("[크롤러] 성공: {} - {}", restaurant.getName(), currentSectionText);
-                            } catch (Exception e) {
-                                log.error("[크롤러] {} 파싱 에러: {}", restaurant.getName(), e.getMessage());
-                            }
+                    if (restaurant != null && table != null) {
+                        try {
+                            parseTodayTable(table, restaurant, mapping, year);
+                            log.info("✅ [학식 성공] {} - {}", restaurant.getName(), sectionText);
+                        } catch (Exception e) {
+                            log.error("❌ [학식 실패] {} 파싱 에러: {}", restaurant.getName(), e.getMessage());
                         }
                     }
                 }
-
-                sibling = sibling.nextElementSibling();
             }
         }
     }
@@ -393,14 +388,16 @@ public class JnuMealCrawler {
 
     private LocalDate parseTodayDate(String dateStr, int baseYear) {
         try {
-            String mmdd = dateStr.trim().substring(0,5); // "03-23"
+            // "03-30 (월)" -> "03-30"만 추출
+            String cleanDate = dateStr.split(" ")[0].trim(); // 공백 기준으로 앞부분만 취함
+            String mmdd = cleanDate.substring(0, 5); // "03-30"
+
             int month = Integer.parseInt(mmdd.split("-")[0]);
-            int year = (LocalDate.now().getMonthValue() == 12 && month == 1)
-                    ? baseYear + 1
-                    : baseYear;
+            int year = (LocalDate.now().getMonthValue() == 12 && month == 1) ? baseYear + 1 : baseYear;
+
             return LocalDate.parse(year + "-" + mmdd, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         } catch (Exception e) {
-            log.warn("[크롤러] 날짜 파싱 실패: '{}'", dateStr);
+            log.warn("[크롤러] 날짜 파싱 실패: '{}' | 사유: {}", dateStr, e.getMessage());
             return null;
         }
     }

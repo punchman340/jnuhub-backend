@@ -30,6 +30,7 @@ dependencies {
 	implementation 'org.flywaydb:flyway-core'
 	implementation 'org.flywaydb:flyway-database-postgresql'
 	implementation 'io.hypersistence:hypersistence-utils-hibernate-63:3.9.0'
+	implementation 'org.springframework.boot:spring-boot-starter-webflux'
 	runtimeOnly 'org.postgresql:postgresql'
 
 	implementation 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5'
@@ -40,6 +41,10 @@ dependencies {
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	implementation 'com.google.genai:google-genai:0.1.0'
+	implementation 'com.google.guava:guava:33.0.0-jre'
+	implementation 'com.google.code.gson:gson:2.10.1'
 }
 
 tasks.named('test') {
