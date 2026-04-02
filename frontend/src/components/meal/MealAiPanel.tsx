@@ -5,8 +5,8 @@ import './MealAiPanel.css';
 
 // 질문 타입 → 한글 라벨 매핑
 const QUESTION_LABEL: Record<MealAiAnswer['questionType'], string> = {
-  BEST_CAMPUS: '🏫 오늘의 캠퍼스 최고 메뉴',
-  BEST_DORM:   '🏠 오늘의 기숙사 최고 메뉴',
+  BEST_CAMPUS: '🏫 오늘의 본캠 중식 중 최고 메뉴의 식당',
+  BEST_DORM:   '🏠 오늘의 광주기숙사 최고 식사타입',
 };
 
 export default function MealAiPanel() {
