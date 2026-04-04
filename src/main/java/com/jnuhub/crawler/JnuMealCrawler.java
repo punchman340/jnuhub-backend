@@ -8,6 +8,7 @@ import com.jnuhub.repository.MealPlanRepository;
 import com.jnuhub.repository.RestaurantRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -16,6 +17,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.net.ssl.*;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.cert.X509Certificate;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -445,10 +448,16 @@ public class JnuMealCrawler {
         HostnameVerifier allHostsValid = (hostname, session) -> true;
         HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
 
-        // 이제 Jsoup으로 연결 (옵션 없이 기본으로 쳐도 위 설정이 적용됨)
-        return Jsoup.connect(url)
+        Connection connection = Jsoup.connect(url)
                 .timeout(10000)
-                .userAgent("Mozilla/5.0") // 차단 방지용 브라우저 흉내
-                .get();
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+
+        Connection.Response response = connection.execute();
+        byte[] body = response.bodyAsBytes();
+        String charset = response.charset();
+        if (charset == null || charset.isBlank()) {
+            charset = StandardCharsets.UTF_8.name();
+        }
+        return Jsoup.parse(new ByteArrayInputStream(body), charset, response.url().toExternalForm());
     }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { fetchMealAiAnswers } from '../../api/mealApi';
 import type { MealAiAnswer } from '../../types/meal';
 import './MealAiPanel.css';
