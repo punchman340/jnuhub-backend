@@ -51,16 +51,16 @@
 }
 
 #root {
-  width: 1126px;
+  width: 100%;
   max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
+  margin: 0;
+  text-align: left;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
 }
+
 
 body {
   margin: 0;
@@ -108,4 +108,18 @@ code {
   line-height: 135%;
   padding: 4px 8px;
   background: var(--code-bg);
+}
+
+/* SVG 텍스트 선명도 최적화 */
+.map-surface svg text {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  paint-order: stroke fill;
+}
+
+/* GPU 합성 레이어 분리 시 폰트 힌팅 강제 유지 */
+.map-surface {
+  transform-style: flat; /* preserve-3d 제거 */
+  /* will-change: transform; ← 이거 있으면 제거 */
 }

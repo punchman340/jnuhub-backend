@@ -14,39 +14,45 @@ import { MapViewport, type MapPickInfo, type MapViewportHandle } from "../compon
 import "../components/map/MapPage.css";
 
 const POI_OPTIONS: { value: MapPoiFilter; label: string }[] = [
-  { value: "all", label: "전체" },
-  { value: "library", label: "도서관" },
-  { value: "cafe", label: "카페" },
-  { value: "convenience", label: "편의점" },
+  { value: "all",          label: "전체"   },
+  { value: "library",      label: "도서관" },
+  { value: "cafe",         label: "카페"   },
+  { value: "convenience",  label: "편의점" },
 ];
 
 export default function MapPage() {
   const viewportRef = useRef<MapViewportHandle>(null);
-  const [zoom, setZoom] = useState(0.4);
-  const [search, setSearch] = useState("");
-  const [lastPick, setLastPick] = useState<MapPickInfo | null>(null);
-  const [poiFilter, setPoiFilter] = useState<MapPoiFilter>("all");
-  const [devForceLabels, setDevForceLabels] = useState(false);
 
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetDetail, setSheetDetail] = useState<(typeof MAP_BUILDING_REGISTRY)[string] | null>(null);
+  const [zoom,           setZoom]          = useState(0.4);
+  const [search,         setSearch]        = useState("");
+  const [lastPick,       setLastPick]      = useState<MapPickInfo | null>(null);
+  const [poiFilter,      setPoiFilter]     = useState<MapPoiFilter>("all");
+  const [devForceLabels, setDevForceLabels]= useState(false); // ← 컴포넌트 안으로
+  const [sheetOpen,      setSheetOpen]     = useState(false);
+  const [sheetDetail,    setSheetDetail]   = useState<
+    (typeof MAP_BUILDING_REGISTRY)[string] | null
+  >(null);
 
   const isDev = import.meta.env.DEV;
 
+  // ── 레이어 표시 여부 ──────────────────────────────────────────
   const layerVisible = useMemo(() => {
     const roadDetail = zoom >= ROAD_DETAIL_ZOOM_THRESHOLD;
-    const labelsOn =
-      (isDev && devForceLabels) || (!isDev && zoom >= LABEL_ZOOM_THRESHOLD) || (isDev && zoom >= LABEL_ZOOM_THRESHOLD);
+    // dev: 체크박스 강제 on 또는 줌 기준. prod: 줌 기준만.
+    const labelsOn = devForceLabels || zoom >= LABEL_ZOOM_THRESHOLD;
 
     return {
-      labels: labelsOn,
+      labels:      labelsOn,
       road_simple: !roadDetail,
-      road_detail: roadDetail,
-      cafe: true,
-      convenience: true,
+      road_detail:  roadDetail,
+      cafe:         true,
+      convenience:  true,
+      library:      true,
+      parking:      true,
     };
-  }, [zoom, isDev, devForceLabels]);
+  }, [zoom, devForceLabels]);
 
+  // ── 클릭 핸들러 ───────────────────────────────────────────────
   const onPick = useCallback((info: MapPickInfo) => {
     setLastPick(info);
     if (!info.elementId) {
@@ -62,12 +68,11 @@ export default function MapPage() {
     }
   }, []);
 
+  // ── 검색 ──────────────────────────────────────────────────────
   const runSearch = () => {
     const matches = findBuildingsByQuery(search);
     if (matches.length === 0) {
-      if (import.meta.env.DEV) {
-        console.warn("[Map] 검색 결과 없음:", search);
-      }
+      if (isDev) console.warn("[Map] 검색 결과 없음:", search);
       return;
     }
     const id = matches[0];
@@ -79,9 +84,10 @@ export default function MapPage() {
   };
 
   return (
-    <div className="app-container map-app-shell">
-      <header className="map-page-header">
-        <Link to="/" className="map-back map-back--light">
+    <div className="map-page">
+      {/* ── 헤더 ── */}
+      <header className="map-top-bar">
+        <Link to="/" className="map-back">
           <ArrowLeft size={22} />
           <span>식단</span>
         </Link>
@@ -94,20 +100,26 @@ export default function MapPage() {
             onKeyDown={(e) => e.key === "Enter" && runSearch()}
             aria-label="건물 검색"
           />
-          <button type="button" className="map-search-btn" onClick={runSearch} aria-label="검색 실행">
+          <button
+            type="button"
+            className="map-search-btn"
+            onClick={runSearch}
+            aria-label="검색 실행"
+          >
             <Search size={18} />
           </button>
         </div>
       </header>
 
-      <div className="map-poi-bar" role="tablist" aria-label="시설 유형">
+      {/* ── 카테고리 필터 ── */}
+      <div className="map-filter-bar" role="tablist" aria-label="시설 유형">
         {POI_OPTIONS.map(({ value, label }) => (
           <button
             key={value}
             type="button"
             role="tab"
             aria-selected={poiFilter === value}
-            className={`map-poi-chip ${poiFilter === value ? "active" : ""}`}
+            className={`map-chip${poiFilter === value ? " on" : ""}`}
             onClick={() => setPoiFilter(value)}
           >
             {label}
@@ -115,6 +127,7 @@ export default function MapPage() {
         ))}
       </div>
 
+      {/* ── 지도 ── */}
       <div className="map-stage">
         <MapViewport
           ref={viewportRef}
@@ -125,8 +138,14 @@ export default function MapPage() {
         />
       </div>
 
-      <MapBottomSheet open={sheetOpen} detail={sheetDetail} onClose={() => setSheetOpen(false)} />
+      {/* ── 바텀시트 ── */}
+      <MapBottomSheet
+        open={sheetOpen}
+        detail={sheetDetail}
+        onClose={() => setSheetOpen(false)}
+      />
 
+      {/* ── DevTools (dev 빌드에서만) ── */}
       {isDev && (
         <MapDevTools
           zoom={zoom}
