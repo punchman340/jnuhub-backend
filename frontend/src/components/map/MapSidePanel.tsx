@@ -1,35 +1,39 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Search, X, ChevronDown, ChevronRight, MapPin } from "lucide-react";
-import {
-  MAP_BUILDING_REGISTRY,
-} from "./mapBuildingRegistry";
-import type { MapBuildingDetail, MapCategory } from "./mapBuildingRegistry";
+import { MAP_BUILDING_REGISTRY, type MapBuildingDetail, type MapCategory } from "./mapBuildingRegistry";
 
 type Props = {
   open: boolean;
   onClose: () => void;
   selectedDetail: MapBuildingDetail | null;
   onSelectBuilding: (id: string) => void;
-  activeFilter: "all" | MapCategory;
-  onFilterChange: (f: "all" | MapCategory) => void;
+  sidebarCategory: MapCategory | "all";
+  onCategoryChange: (c: MapCategory | "all") => void;
+  onClearCategory: () => void;
 };
 
-const FILTER_META: { key: "all" | MapCategory; label: string; icon: string }[] = [
-  { key: "all",          label: "전체",   icon: "🗺️" },
-  { key: "library",      label: "도서관", icon: "📚" },
-  { key: "cafe",         label: "카페",   icon: "☕" },
-  { key: "convenience",  label: "편의점", icon: "🏪" },
-  { key: "hall",         label: "학생마루", icon: "🍱" },
-  { key: "dorm",         label: "기숙사", icon: "🏠" },
+const CATEGORY_ORDER: (MapCategory | "all")[] = [
+  "all",
+  "exit",
+  "hall",
+  "dorm",
+  "college",
+  "library",
+  "cafe",
+  "convenience",
+  "other",
 ];
 
-const CATEGORY_LABEL: Record<MapCategory, string> = {
-  library:     "📚 도서관",
-  cafe:        "☕ 카페",
-  convenience: "🏪 편의점",
-  hall:        "🍱 학생마루",
-  dorm:        "🏠 기숙사",
-  other:       "📌 기타",
+const CATEGORY_LABEL: Record<MapCategory | "all", string> = {
+  all: "전체",
+  exit: "탈출 · 출입구",
+  hall: "학생마루",
+  dorm: "기숙사",
+  college: "단과대",
+  library: "도서관",
+  cafe: "카페",
+  convenience: "편의점",
+  other: "기타",
 };
 
 export function MapSidePanel({
@@ -37,103 +41,132 @@ export function MapSidePanel({
   onClose,
   selectedDetail,
   onSelectBuilding,
-  activeFilter,
-  onFilterChange,
+  sidebarCategory,
+  onCategoryChange,
+  onClearCategory,
 }: Props) {
   const [search, setSearch] = useState("");
-  const [expandedCats, setExpandedCats] = useState<Set<string>>(
-    new Set(["library", "cafe", "convenience", "hall"])
-  );
+  const [expandedCollege, setExpandedCollege] = useState<Set<string>>(() => new Set());
 
   const allBuildings = useMemo(() => Object.values(MAP_BUILDING_REGISTRY), []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return allBuildings.filter((b) => {
-      const matchFilter = activeFilter === "all" || b.category === activeFilter;
+      const matchFilter = sidebarCategory === "all" || b.category === sidebarCategory;
       const matchSearch =
         !q ||
         b.displayName.toLowerCase().includes(q) ||
         b.id.toLowerCase().includes(q) ||
+        (b.collegeGroup?.toLowerCase().includes(q) ?? false) ||
         b.rows.some((r) => r.value.toLowerCase().includes(q));
       return matchFilter && matchSearch;
     });
-  }, [allBuildings, search, activeFilter]);
+  }, [allBuildings, search, sidebarCategory]);
 
-  // 카테고리별 그룹핑
-  const grouped = useMemo(() => {
-    const map = new Map<MapCategory, MapBuildingDetail[]>();
+  const collegeByGroup = useMemo(() => {
+    const map = new Map<string, MapBuildingDetail[]>();
     for (const b of filtered) {
-      if (!map.has(b.category)) map.set(b.category, []);
-      map.get(b.category)!.push(b);
+      if (b.category !== "college" || !b.collegeGroup) continue;
+      if (!map.has(b.collegeGroup)) map.set(b.collegeGroup, []);
+      map.get(b.collegeGroup)!.push(b);
     }
+    for (const arr of map.values()) arr.sort((a, x) => a.displayName.localeCompare(x.displayName, "ko"));
     return map;
   }, [filtered]);
 
-  const toggleCat = (cat: string) => {
-    setExpandedCats((prev) => {
+  const nonCollegeGroups = useMemo(() => {
+    const map = new Map<MapCategory, MapBuildingDetail[]>();
+    for (const b of filtered) {
+      if (b.category === "college") continue;
+      if (!map.has(b.category)) map.set(b.category, []);
+      map.get(b.category)!.push(b);
+    }
+    for (const arr of map.values()) arr.sort((a, x) => a.displayName.localeCompare(x.displayName, "ko"));
+    return map;
+  }, [filtered]);
+
+  const showCollegeList = sidebarCategory === "all" || sidebarCategory === "college";
+  const showNonCollegeList = sidebarCategory !== "college";
+
+  const toggleCollege = (g: string) => {
+    setExpandedCollege((prev) => {
       const next = new Set(prev);
-      next.has(cat) ? next.delete(cat) : next.add(cat);
+      next.has(g) ? next.delete(g) : next.add(g);
       return next;
     });
   };
 
   return (
     <>
-      {/* 백드롭 (모바일) */}
       {open && (
         <div
           className="side-panel-backdrop"
           onClick={onClose}
-          aria-hidden="true"
+          role="button"
+          aria-label="닫기"
         />
       )}
 
-      <aside className={`side-panel ${open ? "open" : ""}`} aria-label="건물 검색 패널">
-        {/* 헤더 */}
+      <div className={`side-panel${open ? " open" : ""}`}>
         <div className="side-panel-header">
-          <span className="side-panel-title">캠퍼스 탐색</span>
-          <button className="side-panel-close" onClick={onClose} aria-label="패널 닫기">
-            <X size={20} />
+          <span className="side-panel-title">캠퍼스 시설</span>
+          <button type="button" className="side-panel-close" onClick={onClose} aria-label="닫기">
+            <X size={18} />
           </button>
         </div>
 
-        {/* 검색 */}
         <div className="side-panel-search">
-          <Search size={16} className="side-panel-search-icon" />
+          <Search size={15} className="side-panel-search-icon" />
           <input
-            type="search"
-            placeholder="건물명 검색…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            aria-label="건물 검색"
+            placeholder="건물·단과대 검색…"
           />
           {search && (
-            <button onClick={() => setSearch("")} aria-label="검색 초기화">
+            <button type="button" onClick={() => setSearch("")} aria-label="검색어 지우기">
               <X size={14} />
             </button>
           )}
         </div>
 
-        {/* 카테고리 필터 칩 */}
-        <div className="side-panel-chips">
-          {FILTER_META.map(({ key, label, icon }) => (
+        <div className="side-panel-filter-head">
+          <span className="side-filter-label">카테고리</span>
+          {sidebarCategory !== "all" && (
+            <button type="button" className="side-filter-clear" onClick={onClearCategory} title="필터 해제">
+              <X size={16} aria-hidden />
+            </button>
+          )}
+        </div>
+        <div className="side-panel-chips" role="tablist" aria-label="시설 유형">
+          {CATEGORY_ORDER.filter((k) => k !== "other" || nonCollegeGroups.has("other")).map((key) => (
             <button
               key={key}
-              className={`side-chip ${activeFilter === key ? "active" : ""}`}
-              onClick={() => onFilterChange(key)}
+              type="button"
+              role="tab"
+              aria-selected={sidebarCategory === key}
+              className={`side-chip${sidebarCategory === key ? " active" : ""}`}
+              onClick={() => onCategoryChange(key)}
             >
-              <span>{icon}</span> {label}
+              {CATEGORY_LABEL[key]}
             </button>
           ))}
         </div>
 
-        {/* 상세 정보 영역 */}
         {selectedDetail && (
           <div className="side-panel-detail">
             <div className="side-detail-head">
-              <MapPin size={16} />
+              <MapPin size={15} />
               <strong>{selectedDetail.displayName}</strong>
+              <button
+                type="button"
+                className="side-detail-clear"
+                onClick={() => onSelectBuilding("")}
+                aria-label="선택 해제"
+                title="선택 해제"
+              >
+                <X size={18} />
+              </button>
             </div>
             {selectedDetail.photoSrc ? (
               <img
@@ -142,7 +175,7 @@ export function MapSidePanel({
                 className="side-detail-photo"
               />
             ) : (
-              <div className="side-detail-photo-placeholder">📷 사진 없음</div>
+              <div className="side-detail-photo-placeholder">사진 없음</div>
             )}
             <dl className="side-detail-rows">
               {selectedDetail.rows.map((row) => (
@@ -152,55 +185,79 @@ export function MapSidePanel({
                 </div>
               ))}
             </dl>
-            <button
-              className="side-detail-dismiss"
-              onClick={() => onSelectBuilding("")}
-            >
-              닫기
-            </button>
           </div>
         )}
 
-        {/* 건물 목록 */}
         <div className="side-panel-list">
-          {grouped.size === 0 && (
-            <p className="side-panel-empty">검색 결과가 없습니다.</p>
-          )}
-          {Array.from(grouped.entries()).map(([cat, buildings]) => (
-            <div key={cat} className="side-cat-group">
-              <button
-                className="side-cat-header"
-                onClick={() => toggleCat(cat)}
-              >
-                {expandedCats.has(cat) ? (
-                  <ChevronDown size={15} />
-                ) : (
-                  <ChevronRight size={15} />
-                )}
-                <span>{CATEGORY_LABEL[cat] ?? cat}</span>
-                <span className="side-cat-count">{buildings.length}</span>
-              </button>
-              {expandedCats.has(cat) && (
-                <ul className="side-building-list">
-                  {buildings.map((b) => (
-                    <li key={b.id}>
-                      <button
-                        className={`side-building-item ${
-                          selectedDetail?.id === b.id ? "selected" : ""
-                        }`}
-                        onClick={() => onSelectBuilding(b.id)}
-                      >
-                        <MapPin size={13} />
-                        <span>{b.displayName}</span>
+          {filtered.length === 0 && <p className="side-panel-empty">검색 결과가 없습니다.</p>}
+
+          {showCollegeList &&
+            Array.from(collegeByGroup.entries())
+              .sort(([a], [b]) => a.localeCompare(b, "ko"))
+              .map(([group, buildings]) => {
+                const accordion = sidebarCategory === "college";
+                const openG = !accordion || expandedCollege.has(group);
+                return (
+                  <div key={group} className="side-cat-group">
+                    {accordion ? (
+                      <button type="button" className="side-cat-header" onClick={() => toggleCollege(group)}>
+                        {openG ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        {group}
+                        <span className="side-cat-count">{buildings.length}</span>
                       </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
+                    ) : (
+                      <div className="side-cat-header side-cat-header--static">
+                        {group}
+                        <span className="side-cat-count">{buildings.length}</span>
+                      </div>
+                    )}
+                    {openG && (
+                      <ul className="side-building-list">
+                        {buildings.map((b) => (
+                          <li key={b.id}>
+                            <button
+                              type="button"
+                              className={`side-building-item${selectedDetail?.id === b.id ? " selected" : ""}`}
+                              onClick={() => onSelectBuilding(b.id)}
+                            >
+                              <MapPin size={13} />
+                              {b.displayName}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+
+          {showNonCollegeList &&
+            CATEGORY_ORDER.filter((c) => c !== "all" && c !== "college")
+              .map((cat) => {
+                const buildings = nonCollegeGroups.get(cat as MapCategory);
+                if (!buildings?.length) return null;
+                return (
+                  <div key={cat} className="side-cat-group">
+                    <div className="side-cat-header side-cat-header--static">{CATEGORY_LABEL[cat as MapCategory]}</div>
+                    <ul className="side-building-list">
+                      {buildings.map((b) => (
+                        <li key={b.id}>
+                          <button
+                            type="button"
+                            className={`side-building-item${selectedDetail?.id === b.id ? " selected" : ""}`}
+                            onClick={() => onSelectBuilding(b.id)}
+                          >
+                            <MapPin size={13} />
+                            {b.displayName}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
         </div>
-      </aside>
+      </div>
     </>
   );
 }

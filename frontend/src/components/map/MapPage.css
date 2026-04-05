@@ -325,6 +325,14 @@ html, body, #root {
   margin: 4px 0;
   cursor: pointer;
 }
+.map-devtools-layer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+  margin: 6px 0 10px;
+  font-size: 0.68rem;
+}
+.map-devtools-check--sm { margin: 0; }
 .map-devtools-nav-btns { display: flex; gap: 6px; margin-top: 6px; }
 .map-devtools-nav-btns button {
   flex: 1;
@@ -425,6 +433,34 @@ html, body, #root {
   color: #9ca3af; padding: 2px;
 }
 
+.side-panel-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px 6px;
+  flex-shrink: 0;
+}
+.side-filter-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.side-filter-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #b91c1c;
+  cursor: pointer;
+}
+.side-filter-clear:hover { background: #fecaca; }
+
 /* 카테고리 칩 */
 .side-panel-chips {
   display: flex;
@@ -469,6 +505,22 @@ html, body, #root {
   color: #1d4ed8;
   font-size: 0.95rem;
 }
+.side-detail-head strong { flex: 1; min-width: 0; }
+.side-detail-clear {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.side-detail-clear:hover { background: #e2e8f0; color: #0f172a; }
 .side-detail-photo {
   width: 100%;
   height: 100px;
@@ -537,6 +589,17 @@ html, body, #root {
   border-radius: 6px;
 }
 .side-cat-header:hover { background: #f3f4f6; }
+.side-cat-header--static {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+  font-weight: 600;
+  color: #4b5563;
+  padding: 8px 4px 4px;
+}
+.side-cat-header--static:hover { background: none; }
+.side-cat-header--static .side-cat-count { margin-left: auto; }
 .side-cat-count {
   margin-left: auto;
   background: #e5e7eb;

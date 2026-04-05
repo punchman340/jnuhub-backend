@@ -22,6 +22,3 @@ export const MAP_LAYER_IDS = [
 
 
 export type MapLayerId = (typeof MAP_LAYER_IDS)[number];
-
-/** POI 필터 - "all" 이외엔 해당 카테고리 핀만 강조 */
-export type MapPoiFilter = "all" | "library" | "cafe" | "convenience";

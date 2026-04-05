@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LABEL_ZOOM_THRESHOLD } from "./mapConstants";
+import { LABEL_ZOOM_THRESHOLD, MAP_LAYER_IDS, ROAD_DETAIL_ZOOM_THRESHOLD, type MapLayerId } from "./mapConstants";
 import type { MapPickInfo } from "./MapViewport";
 
 type Props = {
@@ -8,9 +8,18 @@ type Props = {
   lastPick: MapPickInfo | null;
   devForceLabels: boolean;
   onDevForceLabels: (v: boolean) => void;
+  layerToggles: Record<MapLayerId, boolean>;
+  onLayerToggle: (id: MapLayerId, v: boolean) => void;
 };
 
-export function MapDevTools({ zoom, lastPick, devForceLabels, onDevForceLabels }: Props) {
+export function MapDevTools({
+  zoom,
+  lastPick,
+  devForceLabels,
+  onDevForceLabels,
+  layerToggles,
+  onLayerToggle,
+}: Props) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false); // 기본 숨김
 
@@ -45,10 +54,22 @@ export function MapDevTools({ zoom, lastPick, devForceLabels, onDevForceLabels }
             />
             labels 강제 표시
           </label>
+          <div className="map-devtools-layer-grid">
+            {MAP_LAYER_IDS.map((id) => (
+              <label key={id} className="map-devtools-check map-devtools-check--sm">
+                <input
+                  type="checkbox"
+                  checked={layerToggles[id]}
+                  onChange={(e) => onLayerToggle(id, e.target.checked)}
+                />
+                {id}
+              </label>
+            ))}
+          </div>
           <div className="map-devtools-row map-devtools-pick">
             <span>Last pick</span>
             <code>
-              {`id: ${lastPick?.elementId ?? "—"}\nsvg: (${lastPick?.svgX.toFixed(1) ?? "—"}, ${lastPick?.svgY.toFixed(1) ?? "—"})`}
+              {`dom: ${lastPick?.elementId ?? "—"}\nreg: ${lastPick?.registryId ?? "—"}\nsvg: (${lastPick?.svgX.toFixed(1) ?? "—"}, ${lastPick?.svgY.toFixed(1) ?? "—"})`}
             </code>
           </div>
           <div className="map-devtools-nav-btns">
