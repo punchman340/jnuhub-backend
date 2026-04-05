@@ -81,6 +81,31 @@ export const MAP_BUILDING_REGISTRY: Record<string, MapBuildingDetail> = {
     rows: [{ label: "메모", value: "간식 · 생필품" }],
     focus: { cx: 680, cy: 500 },
   },
+
+  "library-main": {
+    id: "library-main",
+    displayName: "도서관 본관(홍도)",
+    category: "library",
+    rows: [
+      { label: "위치", value: "용봉캠퍼스" },
+      { label: "메모", value: "SVG id: library-main" },
+    ],
+    focus: { cx: 812, cy: 508 },
+  },
+  "library-info": {
+    id: "library-info",
+    displayName: "도서관정보마루(디도)",
+    category: "library",
+    rows: [{ label: "메모", value: "SVG id: library-info" }],
+    focus: { cx: 798, cy: 548 },
+  },
+  "library-annex": {
+    id: "library-annex",
+    displayName: "도서관별관(백도)",
+    category: "library",
+    rows: [{ label: "메모", value: "SVG id: library-annex" }],
+    focus: { cx: 888, cy: 388 },
+  },
 };
 
 export function listSearchableBuildingIds(): string[] {
@@ -94,7 +119,8 @@ export function findBuildingsByQuery(q: string): string[] {
     const d = MAP_BUILDING_REGISTRY[id];
     return (
       id.toLowerCase().includes(t) ||
-      d.displayName.toLowerCase().includes(t)
+      d.displayName.toLowerCase().includes(t) ||
+      d.rows.some((r) => r.value.toLowerCase().includes(t) || r.label.toLowerCase().includes(t))
     );
   });
 }

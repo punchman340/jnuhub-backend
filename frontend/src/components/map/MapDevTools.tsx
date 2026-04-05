@@ -1,24 +1,15 @@
 import { useNavigate } from "react-router-dom";
-import { MAP_LAYER_IDS, type MapLayerId } from "./mapConstants";
+import { LABEL_ZOOM_THRESHOLD, ROAD_DETAIL_ZOOM_THRESHOLD } from "./mapConstants";
 import type { MapPickInfo } from "./MapViewport";
 
 type Props = {
   zoom: number;
   lastPick: MapPickInfo | null;
-  layerToggles: Record<MapLayerId, boolean>;
-  onLayerToggle: (id: MapLayerId, value: boolean) => void;
-  devLabelsAlways: boolean;
-  onDevLabelsAlways: (v: boolean) => void;
+  devForceLabels: boolean;
+  onDevForceLabels: (v: boolean) => void;
 };
 
-export function MapDevTools({
-  zoom,
-  lastPick,
-  layerToggles,
-  onLayerToggle,
-  devLabelsAlways,
-  onDevLabelsAlways,
-}: Props) {
+export function MapDevTools({ zoom, lastPick, devForceLabels, onDevForceLabels }: Props) {
   const navigate = useNavigate();
 
   const navTest = (to: string) => {
@@ -35,6 +26,14 @@ export function MapDevTools({
         <span>Zoom</span>
         <strong>{zoom.toFixed(3)}</strong>
       </div>
+      <p className="map-devtools-hint">
+        도로: 줌 &lt; {ROAD_DETAIL_ZOOM_THRESHOLD} → road_simple / ≥ {ROAD_DETAIL_ZOOM_THRESHOLD} → road_detail.
+        라벨(#lables): 줌 ≥ {LABEL_ZOOM_THRESHOLD} (또는 아래 체크로 강제).
+      </p>
+      <label className="map-devtools-check">
+        <input type="checkbox" checked={devForceLabels} onChange={(e) => onDevForceLabels(e.target.checked)} />
+        labels 항상 표시 (LOD 무시)
+      </label>
       <div className="map-devtools-row map-devtools-pick">
         <span>Last target</span>
         <code>
@@ -45,26 +44,6 @@ export function MapDevTools({
           client: ({lastPick?.clientX.toFixed(0) ?? "—"}, {lastPick?.clientY.toFixed(0) ?? "—"})
         </code>
       </div>
-
-      <div className="map-devtools-section">Layer visibility</div>
-      <label className="map-devtools-check">
-        <input
-          type="checkbox"
-          checked={devLabelsAlways}
-          onChange={(e) => onDevLabelsAlways(e.target.checked)}
-        />
-        labels 항상 표시 (LOD 무시)
-      </label>
-      {MAP_LAYER_IDS.map((id) => (
-        <label key={id} className="map-devtools-check">
-          <input
-            type="checkbox"
-            checked={layerToggles[id]}
-            onChange={(e) => onLayerToggle(id, e.target.checked)}
-          />
-          {id}
-        </label>
-      ))}
 
       <div className="map-devtools-section">Navigation test</div>
       <div className="map-devtools-nav-btns">

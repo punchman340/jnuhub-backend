@@ -1,40 +1,32 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Search } from "lucide-react";
-import { MAP_BUILDING_REGISTRY, findBuildingsByQuery, type MapCategory } from "../components/map/mapBuildingRegistry";
-import { LABEL_ZOOM_THRESHOLD, MAP_LAYER_IDS, type MapLayerId } from "../components/map/mapConstants";
+import "../App.css";
+import { MAP_BUILDING_REGISTRY, findBuildingsByQuery } from "../components/map/mapBuildingRegistry";
+import {
+  LABEL_ZOOM_THRESHOLD,
+  ROAD_DETAIL_ZOOM_THRESHOLD,
+  type MapPoiFilter,
+} from "../components/map/mapConstants";
 import { MapBottomSheet } from "../components/map/MapBottomSheet";
 import { MapDevTools } from "../components/map/MapDevTools";
 import { MapViewport, type MapPickInfo, type MapViewportHandle } from "../components/map/MapViewport";
 import "../components/map/MapPage.css";
 
-const CATEGORY_META: { key: MapCategory; label: string; layer: MapLayerId }[] = [
-  { key: "library", label: "도서관", layer: "library" },
-  { key: "cafe", label: "카페", layer: "cafe" },
-  { key: "convenience", label: "편의점", layer: "convenience" },
+const POI_OPTIONS: { value: MapPoiFilter; label: string }[] = [
+  { value: "all", label: "전체" },
+  { value: "library", label: "도서관" },
+  { value: "cafe", label: "카페" },
+  { value: "convenience", label: "편의점" },
 ];
-
-function initialLayerState(on: boolean): Record<MapLayerId, boolean> {
-  return Object.fromEntries(MAP_LAYER_IDS.map((id) => [id, on])) as Record<MapLayerId, boolean>;
-}
 
 export default function MapPage() {
   const viewportRef = useRef<MapViewportHandle>(null);
-  const [zoom, setZoom] = useState(0.55);
+  const [zoom, setZoom] = useState(0.4);
   const [search, setSearch] = useState("");
   const [lastPick, setLastPick] = useState<MapPickInfo | null>(null);
-
-  const [categoryOn, setCategoryOn] = useState<Record<MapCategory, boolean>>({
-    library: true,
-    cafe: true,
-    convenience: true,
-    dorm: true,
-    hall: true,
-    other: true,
-  });
-
-  const [devLayers, setDevLayers] = useState<Record<MapLayerId, boolean>>(() => initialLayerState(true));
-  const [devLabelsAlways, setDevLabelsAlways] = useState(false);
+  const [poiFilter, setPoiFilter] = useState<MapPoiFilter>("all");
+  const [devForceLabels, setDevForceLabels] = useState(false);
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetDetail, setSheetDetail] = useState<(typeof MAP_BUILDING_REGISTRY)[string] | null>(null);
@@ -42,24 +34,18 @@ export default function MapPage() {
   const isDev = import.meta.env.DEV;
 
   const layerVisible = useMemo(() => {
-    const labelsFromLod = zoom >= LABEL_ZOOM_THRESHOLD;
+    const roadDetail = zoom >= ROAD_DETAIL_ZOOM_THRESHOLD;
+    const labelsOn =
+      (isDev && devForceLabels) || (!isDev && zoom >= LABEL_ZOOM_THRESHOLD) || (isDev && zoom >= LABEL_ZOOM_THRESHOLD);
 
-    if (!isDev) {
-      const out = initialLayerState(true);
-      out.labels = labelsFromLod;
-      for (const { key, layer } of CATEGORY_META) {
-        if (!categoryOn[key]) out[layer] = false;
-      }
-      return out;
-    }
-
-    const out = { ...devLayers };
-    out.labels = devLabelsAlways || labelsFromLod;
-    for (const { key, layer } of CATEGORY_META) {
-      if (!categoryOn[key]) out[layer] = false;
-    }
-    return out;
-  }, [isDev, devLayers, devLabelsAlways, zoom, categoryOn]);
+    return {
+      labels: labelsOn,
+      road_simple: !roadDetail,
+      road_detail: roadDetail,
+      cafe: true,
+      convenience: true,
+    };
+  }, [zoom, isDev, devForceLabels]);
 
   const onPick = useCallback((info: MapPickInfo) => {
     setLastPick(info);
@@ -79,8 +65,9 @@ export default function MapPage() {
   const runSearch = () => {
     const matches = findBuildingsByQuery(search);
     if (matches.length === 0) {
-      // eslint-disable-next-line no-console
-      console.warn("[Map] 검색 결과 없음:", search);
+      if (import.meta.env.DEV) {
+        console.warn("[Map] 검색 결과 없음:", search);
+      }
       return;
     }
     const id = matches[0];
@@ -91,25 +78,17 @@ export default function MapPage() {
     }
   };
 
-  const toggleCategory = (key: MapCategory) => {
-    setCategoryOn((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const onLayerToggle = (id: MapLayerId, value: boolean) => {
-    setDevLayers((prev) => ({ ...prev, [id]: value }));
-  };
-
   return (
-    <div className="map-page">
-      <header className="map-top-bar">
-        <Link to="/" className="map-back">
+    <div className="app-container map-app-shell">
+      <header className="map-page-header">
+        <Link to="/" className="map-back map-back--light">
           <ArrowLeft size={22} />
           <span>식단</span>
         </Link>
         <div className="map-search">
           <input
             type="search"
-            placeholder="건물명 검색 (레지스트리 id)"
+            placeholder="건물 검색 (예: 도서관, library-main)"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && runSearch()}
@@ -121,13 +100,15 @@ export default function MapPage() {
         </div>
       </header>
 
-      <div className="map-filter-bar">
-        {CATEGORY_META.map(({ key, label }) => (
+      <div className="map-poi-bar" role="tablist" aria-label="시설 유형">
+        {POI_OPTIONS.map(({ value, label }) => (
           <button
-            key={key}
+            key={value}
             type="button"
-            className={`map-chip ${categoryOn[key] ? "on" : ""}`}
-            onClick={() => toggleCategory(key)}
+            role="tab"
+            aria-selected={poiFilter === value}
+            className={`map-poi-chip ${poiFilter === value ? "active" : ""}`}
+            onClick={() => setPoiFilter(value)}
           >
             {label}
           </button>
@@ -138,6 +119,7 @@ export default function MapPage() {
         <MapViewport
           ref={viewportRef}
           layerVisible={layerVisible}
+          poiFilter={poiFilter}
           onZoomChange={setZoom}
           onPick={onPick}
         />
@@ -149,10 +131,8 @@ export default function MapPage() {
         <MapDevTools
           zoom={zoom}
           lastPick={lastPick}
-          layerToggles={devLayers}
-          onLayerToggle={onLayerToggle}
-          devLabelsAlways={devLabelsAlways}
-          onDevLabelsAlways={setDevLabelsAlways}
+          devForceLabels={devForceLabels}
+          onDevForceLabels={setDevForceLabels}
         />
       )}
     </div>

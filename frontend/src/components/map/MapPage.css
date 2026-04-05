@@ -1,4 +1,5 @@
-.map-page {
+/* 식단과 동일한 .app-container 폭; 지도 전용 톤 */
+.map-app-shell {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -6,11 +7,11 @@
   color: #e2e8f0;
 }
 
-.map-top-bar {
+.map-page-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 10px 16px;
   padding-top: max(10px, env(safe-area-inset-top));
   background: rgba(15, 23, 42, 0.92);
   border-bottom: 1px solid rgba(148, 163, 184, 0.25);
@@ -32,6 +33,10 @@
 
 .map-back:active {
   transform: scale(0.98);
+}
+
+.map-back--light {
+  color: #f1f5f9;
 }
 
 .map-search {
@@ -65,15 +70,15 @@
   justify-content: center;
 }
 
-.map-filter-bar {
+.map-poi-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 8px 16px;
   flex-shrink: 0;
 }
 
-.map-chip {
+.map-poi-chip {
   border: 1px solid rgba(148, 163, 184, 0.4);
   background: transparent;
   color: #cbd5e1;
@@ -83,7 +88,7 @@
   cursor: pointer;
 }
 
-.map-chip.on {
+.map-poi-chip.active {
   background: rgba(37, 99, 235, 0.35);
   border-color: #3b82f6;
   color: #eff6ff;
@@ -342,10 +347,8 @@
   cursor: pointer;
 }
 
-@media (min-width: 768px) {
-  .map-page {
-    max-width: 520px;
-    margin: 0 auto;
-    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.15);
-  }
+.map-devtools-hint {
+  margin: 0 0 8px;
+  line-height: 1.35;
+  color: #94a3b8;
 }
