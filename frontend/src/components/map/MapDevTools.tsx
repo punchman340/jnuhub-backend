@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LABEL_ZOOM_THRESHOLD, ROAD_DETAIL_ZOOM_THRESHOLD } from "./mapConstants";
+import { LABEL_ZOOM_THRESHOLD } from "./mapConstants";
 import type { MapPickInfo } from "./MapViewport";
 
 type Props = {

@@ -7,7 +7,13 @@ import {
   useState,
 } from "react";
 import mapSvgUrl from "../../assets/JNUHUB-MAPDESIGN.svg?url";
-import { MAP_VIEWBOX, type MapLayerId, type MapPoiFilter } from "./mapConstants";
+import {
+  MAP_VIEWBOX,
+  MIN_SCALE,
+  MAX_SCALE,
+  type MapLayerId,
+  type MapPoiFilter,
+} from "./mapConstants";
 import { MAP_BUILDING_REGISTRY } from "./mapBuildingRegistry";
 
 // ── 공개 타입 ──────────────────────────────────────────────────
@@ -33,12 +39,12 @@ type Props = {
 };
 
 // ── 상수 ──────────────────────────────────────────────────────
-const MIN_SCALE = 0.2;
-const MAX_SCALE = 5.0;
 const WHEEL_FACTOR = 1.08;
 
+// SVG 내부 <g id> → 실제 DOM id 매핑
+// (Figma export 시 오타 "lables" 도 대응)
 const LAYER_DOM_ID: Record<string, string> = {
-  labels:      "lables",
+  labels:      "lables",   // ← SVG 안에 오타 있으면 여기서 보정
   road_simple: "road_simple",
   road_detail: "road_detail",
   cafe:        "cafe",
@@ -51,7 +57,7 @@ const LAYER_DOM_ID: Record<string, string> = {
 const clamp = (v: number, mn: number, mx: number) =>
   Math.min(mx, Math.max(mn, v));
 
-function dist2(t0: React.Touch, t1: React.Touch) {
+function dist2(t0: Touch, t1: Touch) {
   const dx = t1.clientX - t0.clientX;
   const dy = t1.clientY - t0.clientY;
   return Math.sqrt(dx * dx + dy * dy);
@@ -72,7 +78,9 @@ function clientToSvg(
 }
 
 function resolveClickableId(el: Element | null): string | null {
-  const SKIP = /^(Vector|Rectangle|Ellipse|path-\d|outside-\d|road_simple|road_detail|lables|roads|building|cafe|convenience|library|parking)/i;
+  // 클릭 가능한 건물 id 탐색 - 구조적 그룹 id 제외
+  const SKIP =
+    /^(Vector|Rectangle|Ellipse|path-|outside-|road_simple|road_detail|lables|roads|building|cafe|convenience|library|parking)/i;
   let cur: Element | null = el;
   for (let i = 0; i < 12 && cur; i++) {
     const id = cur.getAttribute("id");
@@ -99,9 +107,10 @@ export const MapViewport = forwardRef<MapViewportHandle, Props>(
 
     const [ox,    setOx]    = useState(0);
     const [oy,    setOy]    = useState(0);
-    const [scale, setScale] = useState(0.4);
+    const [scale, setScale] = useState(MIN_SCALE);
 
-    const stateRef = useRef({ ox: 0, oy: 0, scale: 0.4 });
+    // ref로 항상 최신값 유지 (이벤트 핸들러 클로저 문제 방지)
+    const stateRef = useRef({ ox: 0, oy: 0, scale: MIN_SCALE });
     stateRef.current = { ox, oy, scale };
 
     const drag  = useRef<{ px: number; py: number; ox0: number; oy0: number } | null>(null);
@@ -110,55 +119,122 @@ export const MapViewport = forwardRef<MapViewportHandle, Props>(
       ox0: number; oy0: number;
       midX: number; midY: number;
     } | null>(null);
-
     const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
 
-    // ── SVG fetch ─────────────────────────────────────────
+    // ── 1. SVG fetch ───────────────────────────────────────
     useEffect(() => {
       let cancelled = false;
       fetch(mapSvgUrl)
         .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.text(); })
-        .then((t) => { if (!cancelled) setSvgText(t); })
-        .catch(() => { if (!cancelled) setLoadError("지도 SVG를 불러오지 못했습니다."); });
+        .then((t)  => { if (!cancelled) setSvgText(t); })
+        .catch(()  => { if (!cancelled) setLoadError("지도 SVG를 불러오지 못했습니다."); });
       return () => { cancelled = true; };
     }, []);
 
-    // ── SVG 삽입 ──────────────────────────────────────────
+    // ── 2. fitToView ───────────────────────────────────────
     const fitToView = useCallback(() => {
       const vp = viewportRef.current;
-      if (!vp) return;
+      if (!vp || vp.clientWidth === 0 || vp.clientHeight === 0) return;
       const s = clamp(
         Math.min(vp.clientWidth / MAP_VIEWBOX.w, vp.clientHeight / MAP_VIEWBOX.h) * 0.96,
-        MIN_SCALE, MAX_SCALE
+        MIN_SCALE,
+        MAX_SCALE
       );
       setScale(s);
       setOx(vp.clientWidth  / 2 - (MAP_VIEWBOX.w / 2) * s);
       setOy(vp.clientHeight / 2 - (MAP_VIEWBOX.h / 2) * s);
     }, []);
 
-    // ── SVG 삽입 useEffect 수정 ────────────────────────────────────
+    // ── 3. SVG 삽입 ────────────────────────────────────────
     useEffect(() => {
       if (!svgText || !hostRef.current) return;
       hostRef.current.innerHTML = svgText;
       const svg = hostRef.current.querySelector("svg");
       if (!(svg instanceof SVGSVGElement)) return;
 
-      // ✅ width/height를 뷰포트에 꽉 차게 (100%로)
+      // viewBox 방식: width/height를 뷰포트에 맞추고 viewBox로 줌/팬 제어
       svg.setAttribute("width",  "100%");
       svg.setAttribute("height", "100%");
+      svg.setAttribute("preserveAspectRatio", "none");
       svg.style.display  = "block";
       svg.style.position = "absolute";
       svg.style.inset    = "0";
       svg.style.overflow = "visible";
-      // ✅ preserveAspectRatio 제거 → viewBox로 직접 제어
-      svg.setAttribute("preserveAspectRatio", "none");
 
       svgRef.current = svg;
-      requestAnimationFrame(fitToView);
+      // DOM이 안정된 다음 프레임에 fitToView
+      requestAnimationFrame(() => requestAnimationFrame(fitToView));
     }, [svgText, fitToView]);
 
+    // ── 4. viewBox 갱신 (ox/oy/scale 변경마다) ────────────
+    useEffect(() => {
+      const svg = svgRef.current;
+      const vp  = viewportRef.current;
+      if (!svg || !vp) return;
 
-    // ── 리사이즈 시 중심 유지 ─────────────────────────────
+      const vpW = vp.clientWidth;
+      const vpH = vp.clientHeight;
+      if (vpW === 0 || vpH === 0) return;
+
+      // translate(ox,oy) scale(s) → viewBox 변환
+      // SVG좌표 = (뷰포트좌표 - ox) / scale
+      const vbX = -ox / scale;
+      const vbY = -oy / scale;
+      const vbW =  vpW / scale;
+      const vbH =  vpH / scale;
+
+      svg.setAttribute("viewBox", `${vbX} ${vbY} ${vbW} ${vbH}`);
+    }, [ox, oy, scale]);
+
+    // ── 5. 레이어 + POI 필터 적용 ─────────────────────────
+    const applyLayers = useCallback(() => {
+      const root = svgRef.current;
+      if (!root) return;
+
+      // 레이어 show/hide
+      (Object.entries(layerVisible) as [string, boolean][]).forEach(([logical, vis]) => {
+        const domId = LAYER_DOM_ID[logical] ?? logical;
+        let el: Element | null = null;
+        try { el = root.querySelector(`#${CSS.escape(domId)}`); } catch { el = null; }
+        setDisplay(el, vis);
+      });
+
+      // POI 필터 - 카테고리 레이어 그룹 자체 표시
+      const cafe = root.querySelector("#cafe");
+      const conv = root.querySelector("#convenience");
+      const lib  = root.querySelector("#library");
+
+      setDisplay(cafe, !!layerVisible.cafe        && (poiFilter === "all" || poiFilter === "cafe"));
+      setDisplay(conv, !!layerVisible.convenience && (poiFilter === "all" || poiFilter === "convenience"));
+      setDisplay(lib,  !!layerVisible.library     && (poiFilter === "all" || poiFilter === "library"));
+
+      // building 그룹 내 개별 건물 opacity
+      const bldG = root.querySelector("#building");
+      if (bldG) {
+        bldG.querySelectorAll<SVGElement>(":scope > [id]").forEach((p) => {
+          const id = p.getAttribute("id") ?? "";
+          p.style.opacity =
+            poiFilter === "all" || id.startsWith(poiFilter + "-") ? "1" : "0.12";
+        });
+      }
+
+      // labels 텍스트 필터
+      const labG = root.querySelector("#lables"); // ← SVG 오타 대응
+      if (labG) {
+        labG.querySelectorAll<SVGElement>("text").forEach((t) => {
+          const id = t.getAttribute("id") ?? "";
+          t.style.display =
+            poiFilter === "all" || id.startsWith(poiFilter + "-") ? "" : "none";
+        });
+      }
+    }, [layerVisible, poiFilter]);
+
+    useEffect(() => { applyLayers(); }, [applyLayers, svgText]);
+
+    // ── 6. zoom 변경 알림 ──────────────────────────────────
+    useEffect(() => { onZoomChange(scale); }, [scale, onZoomChange]);
+
+    // ── 7. 리사이즈 시 중심 유지 ──────────────────────────
     useEffect(() => {
       const vp = viewportRef.current;
       if (!vp) return;
@@ -177,115 +253,34 @@ export const MapViewport = forwardRef<MapViewportHandle, Props>(
       return () => ro.disconnect();
     }, []);
 
-    // ── 레이어 + POI 필터 적용 ────────────────────────────
-    const applyLayers = useCallback(() => {
-      const root = svgRef.current;
-      if (!root) return;
-
-      (Object.entries(layerVisible) as [string, boolean][]).forEach(([logical, vis]) => {
-        const domId = LAYER_DOM_ID[logical] ?? logical;
-        let el: Element | null = null;
-        try { el = root.querySelector(`#${CSS.escape(domId)}`); } catch { el = null; }
-        setDisplay(el, vis);
-      });
-
-      const cafe  = root.querySelector("#cafe");
-      const conv  = root.querySelector("#convenience");
-      const lib   = root.querySelector("#library");
-      const labG  = root.querySelector("#lables");
-      const bldG  = root.querySelector("#building");
-
-      setDisplay(cafe, layerVisible.cafe  && (poiFilter === "all" || poiFilter === "cafe"));
-      setDisplay(conv, layerVisible.convenience && (poiFilter === "all" || poiFilter === "convenience"));
-      setDisplay(lib,  layerVisible.library && (poiFilter === "all" || poiFilter === "library"));
-
-      if (bldG) {
-        bldG.querySelectorAll<SVGElement>(":scope > [id]").forEach((p) => {
-          const id = p.getAttribute("id") ?? "";
-          if (poiFilter === "all") {
-            p.style.opacity = "";
-          } else {
-            p.style.opacity = id.startsWith(poiFilter + "-") ? "1" : "0.12";
-          }
-        });
-      }
-
-      if (labG) {
-        labG.querySelectorAll<SVGElement>("text").forEach((t) => {
-          const id = t.getAttribute("id") ?? "";
-          t.style.display =
-            poiFilter === "all" || id.startsWith(poiFilter + "-") ? "" : "none";
-        });
-      }
-    }, [layerVisible, poiFilter]);
-
-    useEffect(() => { applyLayers(); }, [applyLayers, svgText]);
-    useEffect(() => { onZoomChange(scale); }, [scale, onZoomChange]);
-
-
-    // ── focusByBuildingId ──────────────────────────────────
-    const focusByBuildingId = useCallback(
-      (id: string): boolean => {
-        const svg = svgRef.current;
-        const vp  = viewportRef.current;
-        if (!svg || !vp) return false;
-
-        let el: Element | null = null;
-        try { el = svg.querySelector(`#${CSS.escape(id)}`); } catch { el = null; }
-
-        const doFocus = (cx: number, cy: number) => {
-          const s = clamp(Math.max(stateRef.current.scale, 1.5), MIN_SCALE, MAX_SCALE);
-          setScale(s);
-          setOx(vp.clientWidth  / 2 - cx * s);
-          setOy(vp.clientHeight / 2 - cy * s);
-        };
-
-        if (el && "getBBox" in el) {
-          const box = (el as SVGGraphicsElement).getBBox();
-          doFocus(box.x + box.width / 2, box.y + box.height / 2);
-          el.classList.add("jnuhub-map-focus");
-          window.setTimeout(() => el!.classList.remove("jnuhub-map-focus"), 2200);
-          return true;
-        }
-        const meta = MAP_BUILDING_REGISTRY[id];
-        if (meta) { doFocus(meta.focus.cx, meta.focus.cy); return true; }
-        return false;
-      },
-      []
-    );
-    // ── viewBox를 직접 조작하는 함수 추가 ─────────────────────────
-    // scale/ox/oy → viewBox 변환
-    // ox, oy는 "SVG 원점이 뷰포트 어디에 있는가" 를 나타냄
-    // viewBox: 뷰포트에서 (0,0)~(vpW, vpH)에 해당하는 SVG 좌표 영역
-    const applyViewBox = useCallback(() => {
+    // ── 8. focusByBuildingId ───────────────────────────────
+    const focusByBuildingId = useCallback((id: string): boolean => {
       const svg = svgRef.current;
       const vp  = viewportRef.current;
-      if (!svg || !vp) return;
+      if (!svg || !vp) return false;
 
-      const vpW = vp.clientWidth;
-      const vpH = vp.clientHeight;
-      const s   = stateRef.current.scale;
-      const ox_ = stateRef.current.ox;
-      const oy_ = stateRef.current.oy;
+      const doFocus = (cx: number, cy: number) => {
+        const s = clamp(Math.max(stateRef.current.scale, 1.5), MIN_SCALE, MAX_SCALE);
+        setScale(s);
+        setOx(vp.clientWidth  / 2 - cx * s);
+        setOy(vp.clientHeight / 2 - cy * s);
+      };
 
-      // CSS transform: translate(ox,oy) scale(s) 와 동일한 효과를
-      // viewBox로 표현:
-      // SVG좌표 x = (viewport좌표 - ox) / s
-      const vbX = -ox_ / s;
-      const vbY = -oy_ / s;
-      const vbW =  vpW / s;
-      const vbH =  vpH / s;
+      let el: Element | null = null;
+      try { el = svg.querySelector(`#${CSS.escape(id)}`); } catch { el = null; }
 
-      svg.setAttribute("viewBox", `${vbX} ${vbY} ${vbW} ${vbH}`);
+      if (el && "getBBox" in el) {
+        const box = (el as SVGGraphicsElement).getBBox();
+        doFocus(box.x + box.width / 2, box.y + box.height / 2);
+        el.classList.add("jnuhub-map-focus");
+        window.setTimeout(() => el!.classList.remove("jnuhub-map-focus"), 2200);
+        return true;
+      }
+
+      const meta = MAP_BUILDING_REGISTRY[id];
+      if (meta) { doFocus(meta.focus.cx, meta.focus.cy); return true; }
+      return false;
     }, []);
-
-    // ── scale/ox/oy 바뀔 때마다 viewBox 갱신 ─────────────────────
-    useEffect(() => {
-      applyViewBox();
-    }, [ox, oy, scale, applyViewBox]);
-
-    // ── onZoomChange도 유지 ───────────────────────────────────────
-    useEffect(() => { onZoomChange(scale); }, [scale, onZoomChange]);
 
     useImperativeHandle(ref, () => ({
       focusByBuildingId,
@@ -293,7 +288,7 @@ export const MapViewport = forwardRef<MapViewportHandle, Props>(
       fitToView,
     }), [focusByBuildingId, fitToView]);
 
-    // ── 휠 줌 ─────────────────────────────────────────────
+    // ── 9. 휠 줌 ──────────────────────────────────────────
     useEffect(() => {
       const el = viewportRef.current;
       if (!el) return;
@@ -316,7 +311,7 @@ export const MapViewport = forwardRef<MapViewportHandle, Props>(
       return () => el.removeEventListener("wheel", handler);
     }, []);
 
-    // ── 터치 이벤트 ───────────────────────────────────────
+    // ── 10. 터치 이벤트 ────────────────────────────────────
     useEffect(() => {
       const el = viewportRef.current;
       if (!el) return;
@@ -325,17 +320,14 @@ export const MapViewport = forwardRef<MapViewportHandle, Props>(
         e.preventDefault();
         if (e.touches.length === 1) {
           const t = e.touches[0];
-          drag.current = {
-            px: t.clientX, py: t.clientY,
-            ox0: stateRef.current.ox, oy0: stateRef.current.oy,
-          };
+          drag.current = { px: t.clientX, py: t.clientY, ox0: stateRef.current.ox, oy0: stateRef.current.oy };
           pinch.current = null;
         } else if (e.touches.length === 2) {
           drag.current = null;
           const t0 = e.touches[0], t1 = e.touches[1];
           const rect = el.getBoundingClientRect();
           pinch.current = {
-            dist0:  dist2(t0 as unknown as React.Touch, t1 as unknown as React.Touch),
+            dist0:  dist2(t0, t1),
             scale0: stateRef.current.scale,
             ox0:    stateRef.current.ox,
             oy0:    stateRef.current.oy,
@@ -354,9 +346,7 @@ export const MapViewport = forwardRef<MapViewportHandle, Props>(
         } else if (e.touches.length === 2 && pinch.current) {
           const p = pinch.current;
           const t0 = e.touches[0], t1 = e.touches[1];
-          const dx = t1.clientX - t0.clientX;
-          const dy = t1.clientY - t0.clientY;
-          const d  = Math.sqrt(dx * dx + dy * dy);
+          const d  = dist2(t0, t1);
           const newS = clamp(p.scale0 * (d / p.dist0), MIN_SCALE, MAX_SCALE);
           const wx = (p.midX - p.ox0) / p.scale0;
           const wy = (p.midY - p.oy0) / p.scale0;
@@ -374,10 +364,7 @@ export const MapViewport = forwardRef<MapViewportHandle, Props>(
         } else if (e.touches.length === 1) {
           pinch.current = null;
           const t = e.touches[0];
-          drag.current = {
-            px: t.clientX, py: t.clientY,
-            ox0: stateRef.current.ox, oy0: stateRef.current.oy,
-          };
+          drag.current = { px: t.clientX, py: t.clientY, ox0: stateRef.current.ox, oy0: stateRef.current.oy };
         }
       };
 
@@ -391,7 +378,7 @@ export const MapViewport = forwardRef<MapViewportHandle, Props>(
       };
     }, []);
 
-    // ── 마우스 드래그 ─────────────────────────────────────
+    // ── 11. 마우스 드래그 ──────────────────────────────────
     const onPointerDown = (e: React.PointerEvent) => {
       if (e.pointerType === "touch") return;
       if (e.button !== 0) return;
@@ -413,13 +400,13 @@ export const MapViewport = forwardRef<MapViewportHandle, Props>(
       try { (e.target as HTMLElement).releasePointerCapture?.(e.pointerId); } catch { /* ignore */ }
     };
 
-    // ── 클릭 ─────────────────────────────────────────────
+    // ── 12. 클릭 ───────────────────────────────────────────
     const onClick = (e: React.MouseEvent) => {
       const down = pointerDownPos.current;
       if (down) {
         const moved = Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y);
         pointerDownPos.current = null;
-        if (moved > 5) return;
+        if (moved > 5) return; // 드래그는 클릭으로 처리 안 함
       }
       const svg = svgRef.current;
       if (!svg) return;
@@ -428,7 +415,7 @@ export const MapViewport = forwardRef<MapViewportHandle, Props>(
       onPick({ elementId, svgX: p?.x ?? 0, svgY: p?.y ?? 0, clientX: e.clientX, clientY: e.clientY });
     };
 
-    // ── JSX ───────────────────────────────────────────────
+    // ── JSX ────────────────────────────────────────────────
     return (
       <div
         className="map-viewport"
@@ -440,20 +427,17 @@ export const MapViewport = forwardRef<MapViewportHandle, Props>(
         onClick={onClick}
         role="application"
         aria-label="캠퍼스 지도"
+        style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}
       >
         {loadError   && <div className="map-viewport-error">{loadError}</div>}
         {!svgText && !loadError && <div className="map-viewport-loading">지도 불러오는 중…</div>}
 
+        {/* SVG 호스트: 절대위치 꽉 채움 */}
         <div
-          className="map-surface"
-          style={{
-            position: "absolute",
-            inset: 0,
-            overflow: "hidden",
-          }}
-        >
-          <div ref={hostRef} className="map-svg-host" style={{ position: "relative", width: "100%", height: "100%" }} />
-          </div>
+          ref={hostRef}
+          className="map-svg-host"
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+        />
 
         <style>{`
           .jnuhub-map-focus {

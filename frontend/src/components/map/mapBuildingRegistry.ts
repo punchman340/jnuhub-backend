@@ -1,19 +1,10 @@
-/**
- * 건물/시설 id → 상세 데이터.
- * SVG의 <path id="…"> / <g id="…"> 가 여기 키와 동일해야 검색·클릭·포커스가 맞습니다.
- * (공백 없는 한글 id 권장 — SVG id 규칙)
- *
- * focus: DOM에 해당 id가 없을 때 검색 포커스용 대략 중심(viewBox 좌표)
- */
 export type MapCategory = "library" | "cafe" | "convenience" | "dorm" | "hall" | "other";
 
 export interface MapBuildingDetail {
   id: string;
   displayName: string;
   category: MapCategory;
-  /** public 폴더 기준 이미지. 없으면 플레이스홀더 */
   photoSrc?: string;
-  /** 바텀시트에 표시할 행 */
   rows: { label: string; value: string }[];
   focus: { cx: number; cy: number };
 }
