@@ -88,15 +88,20 @@ function formatDateKo(date: Date): string {
 function getWeekDates(base: Date): Date[] {
   const d = new Date(base);
   d.setHours(0, 0, 0, 0);
-  const dow = d.getDay();
-  const monday = new Date(d);
-  monday.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
-  return Array.from({ length: 7 }, (_, i) => {
-    const x = new Date(monday);
-    x.setDate(monday.getDate() + i);
+  const dow = d.getDay(); // 0=일, 1=월, ..., 6=토
+
+  // 이번 주 일요일 (dow=0이면 오늘 자체, 나머지는 뒤로 dow일)
+  const sunday = new Date(d);
+  sunday.setDate(d.getDate() - dow);
+
+  // 일요일 ~ 다음 주 일요일까지 8일
+  return Array.from({ length: 8 }, (_, i) => {
+    const x = new Date(sunday);
+    x.setDate(sunday.getDate() + i);
     return x;
   });
 }
+
 
 function parseMealsData(mealsData: unknown): MealEntry[] {
   if (!mealsData || typeof mealsData !== "object") return [];
@@ -131,7 +136,7 @@ export default function MealPage() {
   const [weeklyMeals, setWeeklyMeals] = useState<Record<string, MealEntry[]>>({});
   const [weeklyStatus, setWeeklyStatus] = useState<Status>("idle");
 
-  const weekDates = getWeekDates(currentDate);
+  const weekDates = getWeekDates(new Date());
   const dateSliderRef = useRef<HTMLDivElement>(null);
   const sliderDragging = useRef(false);
   const sliderStartX = useRef(0);
@@ -229,9 +234,9 @@ export default function MealPage() {
     setWeeklyStatus("loading");
     setWeeklyMeals({});
 
-    const wDates = getWeekDates(currentDate);
+    const wDates = getWeekDates(new Date());
     const fromStr = getLocalDateStr(wDates[0]);
-    const toStr = getLocalDateStr(wDates[6]);
+    const toStr = getLocalDateStr(wDates[7]);
 
     (async () => {
       try {
